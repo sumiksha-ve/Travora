@@ -4,6 +4,7 @@ import com.traveldesk.backend.employee.Employee;
 import jakarta.persistence.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "travel_requests")
@@ -39,6 +40,12 @@ public class TravelRequest {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TravelRequestStatus status = TravelRequestStatus.PENDING;
+
+    private String approverName;
+
+    private String approvalComment;
+
+    private LocalDateTime approvalDate;
 
     public Long getId() {
         return id;
@@ -114,5 +121,29 @@ public class TravelRequest {
 
     public void setStatus(TravelRequestStatus status) {
         this.status = status;
+    }
+
+    public String getApproverName() {
+        return approverName;
+    }
+
+    public void setApproverName(String approverName) {
+        this.approverName = approverName;
+    }
+
+    public String getApprovalComment() {
+        return approvalComment;
+    }
+
+    public void setApprovalComment(String approvalComment) {
+        this.approvalComment = approvalComment;
+    }
+
+    public LocalDateTime getApprovalDate() {
+        return approvalDate;
+    }
+
+    public void setApprovalDate(LocalDateTime approvalDate) {
+        this.approvalDate = approvalDate;
     }
 }
