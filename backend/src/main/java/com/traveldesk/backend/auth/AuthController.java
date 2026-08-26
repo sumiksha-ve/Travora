@@ -10,13 +10,16 @@ public class AuthController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     public AuthController(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            JwtService jwtService
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     @PostMapping("/register")
@@ -35,7 +38,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public User login(@RequestBody LoginRequest request) {
+    public LoginResponse login(@RequestBody LoginRequest request) {
 
         User user = userRepository
                 .findByUsername(request.getUsername())
@@ -60,7 +63,14 @@ public class AuthController {
             );
         }
 
-        return user;
+        String token = jwtService.generateToken(user);
+
+        return new LoginResponse(
+                token,
+                user.getId(),
+                user.getUsername(),
+                user.getRole()
+        );
     }
 
     public static class LoginRequest {
@@ -82,6 +92,42 @@ public class AuthController {
 
         public void setPassword(String password) {
             this.password = password;
+        }
+    }
+
+    public static class LoginResponse {
+
+        private String token;
+        private Long id;
+        private String username;
+        private Role role;
+
+        public LoginResponse(
+                String token,
+                Long id,
+                String username,
+                Role role
+        ) {
+            this.token = token;
+            this.id = id;
+            this.username = username;
+            this.role = role;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public Long getId() {
+            return id;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public Role getRole() {
+            return role;
         }
     }
 }
