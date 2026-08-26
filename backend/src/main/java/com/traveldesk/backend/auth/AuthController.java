@@ -1,6 +1,7 @@
 package com.traveldesk.backend.auth;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -8,9 +9,14 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public AuthController(UserRepository userRepository) {
+    public AuthController(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder
+    ) {
         this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping("/register")
@@ -21,21 +27,37 @@ public class AuthController {
             throw new RuntimeException("Username already exists");
         }
 
+        user.setPassword(
+                passwordEncoder.encode(user.getPassword())
+        );
+
         return userRepository.save(user);
     }
 
     @PostMapping("/login")
     public User login(@RequestBody LoginRequest request) {
 
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Invalid username or password"));
+        User user = userRepository
+                .findByUsername(request.getUsername())
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Invalid username or password"
+                        )
+                );
 
-        if (!user.getPassword().equals(request.getPassword())) {
-            throw new RuntimeException("Invalid username or password");
+        if (!passwordEncoder.matches(
+                request.getPassword(),
+                user.getPassword()
+        )) {
+            throw new RuntimeException(
+                    "Invalid username or password"
+            );
         }
 
         if (!user.isActive()) {
-            throw new RuntimeException("User account is inactive");
+            throw new RuntimeException(
+                    "User account is inactive"
+            );
         }
 
         return user;
