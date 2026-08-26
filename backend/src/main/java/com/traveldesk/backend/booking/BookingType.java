@@ -1,9 +1,9 @@
 package com.traveldesk.backend.booking;
 
 public enum BookingType {
-    AIR,
-    TRAIN,
+    FLIGHT,
     BUS,
-    HOTEL,
-    CAB
+    CAB,
+    TRAIN,
+    HOTEL
 }
