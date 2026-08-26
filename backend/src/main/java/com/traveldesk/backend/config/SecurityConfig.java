@@ -4,17 +4,16 @@ import com.traveldesk.backend.auth.JwtAuthenticationFilter;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -41,25 +40,18 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
-                        // ==============================
-                        // PUBLIC ENDPOINTS
-                        // ==============================
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login",
                                 "/api/health"
                         ).permitAll()
 
-                        // ==============================
-                        // ADMIN ONLY
-                        // ==============================
+                        // ADMIN-only user management
                         .requestMatchers(
-                                "/api/employees/**"
+                                "/api/auth/users/**"
                         ).hasRole("ADMIN")
 
-                        // ==============================
-                        // EVERYTHING ELSE
-                        // ==============================
+                        // Everything else requires authentication
                         .anyRequest().authenticated()
                 )
 

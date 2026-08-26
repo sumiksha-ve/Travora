@@ -1,6 +1,7 @@
 package com.traveldesk.backend.auth;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -69,8 +70,27 @@ public class AuthController {
                 token,
                 user.getId(),
                 user.getUsername(),
-                user.getRole()
+                user.getRole(),
+                user.getEmployeeId()
         );
+    }
+
+    @PutMapping("/users/{userId}/employee")
+    @PreAuthorize("hasRole('ADMIN')")
+    public User assignEmployee(
+            @PathVariable Long userId,
+            @RequestBody EmployeeAssignmentRequest request
+    ) {
+
+        User user = userRepository
+                .findById(userId)
+                .orElseThrow(() ->
+                        new RuntimeException("User not found")
+                );
+
+        user.setEmployeeId(request.getEmployeeId());
+
+        return userRepository.save(user);
     }
 
     public static class LoginRequest {
@@ -95,23 +115,39 @@ public class AuthController {
         }
     }
 
+    public static class EmployeeAssignmentRequest {
+
+        private String employeeId;
+
+        public String getEmployeeId() {
+            return employeeId;
+        }
+
+        public void setEmployeeId(String employeeId) {
+            this.employeeId = employeeId;
+        }
+    }
+
     public static class LoginResponse {
 
         private String token;
         private Long id;
         private String username;
         private Role role;
+        private String employeeId;
 
         public LoginResponse(
                 String token,
                 Long id,
                 String username,
-                Role role
+                Role role,
+                String employeeId
         ) {
             this.token = token;
             this.id = id;
             this.username = username;
             this.role = role;
+            this.employeeId = employeeId;
         }
 
         public String getToken() {
@@ -128,6 +164,10 @@ public class AuthController {
 
         public Role getRole() {
             return role;
+        }
+
+        public String getEmployeeId() {
+            return employeeId;
         }
     }
 }

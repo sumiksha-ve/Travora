@@ -23,6 +23,8 @@ public class User {
     @Column(nullable = false)
     private boolean active = true;
 
+    private String employeeId;
+
     public Long getId() {
         return id;
     }
@@ -57,5 +59,13 @@ public class User {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public String getEmployeeId() {
+        return employeeId;
+    }
+
+    public void setEmployeeId(String employeeId) {
+        this.employeeId = employeeId;
     }
 }
