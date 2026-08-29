@@ -4,6 +4,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -23,12 +24,19 @@ public class AuthController {
         this.jwtService = jwtService;
     }
 
+    // =========================
+    // REGISTER
+    // =========================
+
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
     public User register(@RequestBody User user) {
 
         if (userRepository.existsByUsername(user.getUsername())) {
-            throw new RuntimeException("Username already exists");
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Username already exists"
+            );
         }
 
         user.setPassword(
@@ -38,13 +46,18 @@ public class AuthController {
         return userRepository.save(user);
     }
 
+    // =========================
+    // LOGIN
+    // =========================
+
     @PostMapping("/login")
     public LoginResponse login(@RequestBody LoginRequest request) {
 
         User user = userRepository
                 .findByUsername(request.getUsername())
                 .orElseThrow(() ->
-                        new RuntimeException(
+                        new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED,
                                 "Invalid username or password"
                         )
                 );
@@ -53,13 +66,15 @@ public class AuthController {
                 request.getPassword(),
                 user.getPassword()
         )) {
-            throw new RuntimeException(
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
                     "Invalid username or password"
             );
         }
 
         if (!user.isActive()) {
-            throw new RuntimeException(
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
                     "User account is inactive"
             );
         }
@@ -75,6 +90,11 @@ public class AuthController {
         );
     }
 
+    // =========================
+    // ASSIGN EMPLOYEE TO USER
+    // ADMIN ONLY
+    // =========================
+
     @PutMapping("/users/{userId}/employee")
     @PreAuthorize("hasRole('ADMIN')")
     public User assignEmployee(
@@ -85,13 +105,52 @@ public class AuthController {
         User user = userRepository
                 .findById(userId)
                 .orElseThrow(() ->
-                        new RuntimeException("User not found")
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "User not found"
+                        )
                 );
 
         user.setEmployeeId(request.getEmployeeId());
 
         return userRepository.save(user);
     }
+
+    // =========================
+    // RESET PASSWORD
+    // ADMIN ONLY
+    // =========================
+
+    @PutMapping("/reset-password/{username}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public String resetPassword(
+            @PathVariable String username,
+            @RequestBody PasswordResetRequest request
+    ) {
+
+        User user = userRepository
+                .findByUsername(username)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "User not found"
+                        )
+                );
+
+        user.setPassword(
+                passwordEncoder.encode(
+                        request.getNewPassword()
+                )
+        );
+
+        userRepository.save(user);
+
+        return "Password reset successfully";
+    }
+
+    // =========================
+    // LOGIN REQUEST
+    // =========================
 
     public static class LoginRequest {
 
@@ -115,6 +174,10 @@ public class AuthController {
         }
     }
 
+    // =========================
+    // EMPLOYEE ASSIGNMENT REQUEST
+    // =========================
+
     public static class EmployeeAssignmentRequest {
 
         private String employeeId;
@@ -127,6 +190,27 @@ public class AuthController {
             this.employeeId = employeeId;
         }
     }
+
+    // =========================
+    // PASSWORD RESET REQUEST
+    // =========================
+
+    public static class PasswordResetRequest {
+
+        private String newPassword;
+
+        public String getNewPassword() {
+            return newPassword;
+        }
+
+        public void setNewPassword(String newPassword) {
+            this.newPassword = newPassword;
+        }
+    }
+
+    // =========================
+    // LOGIN RESPONSE
+    // =========================
 
     public static class LoginResponse {
 

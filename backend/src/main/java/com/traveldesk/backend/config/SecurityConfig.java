@@ -43,15 +43,25 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login",
-                                "/api/health"
+                                "/api/health",
+                                "/error"
                         ).permitAll()
 
-                        // ADMIN-only user management
                         .requestMatchers(
                                 "/api/auth/users/**"
                         ).hasRole("ADMIN")
 
-                        // Everything else requires authentication
+                        // Travel request creation is allowed
+                        // for any authenticated user.
+                        .requestMatchers(
+                                "/api/travel-requests"
+                        ).authenticated()
+
+                        // Individual travel requests
+                        .requestMatchers(
+                                "/api/travel-requests/**"
+                        ).authenticated()
+
                         .anyRequest().authenticated()
                 )
 

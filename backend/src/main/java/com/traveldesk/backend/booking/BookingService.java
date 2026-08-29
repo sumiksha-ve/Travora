@@ -77,13 +77,58 @@ public class BookingService {
 
         Booking existingBooking = getBookingById(id);
 
-        existingBooking.setTravelRequest(updatedBooking.getTravelRequest());
-        existingBooking.setBookingType(updatedBooking.getBookingType());
-        existingBooking.setBookingReference(updatedBooking.getBookingReference());
-        existingBooking.setProvider(updatedBooking.getProvider());
-        existingBooking.setCost(updatedBooking.getCost());
-        existingBooking.setSavings(updatedBooking.getSavings());
-        existingBooking.setNotes(updatedBooking.getNotes());
+        /*
+         * Do NOT replace the existing travel request with null.
+         * The database requires travel_request_id to be NOT NULL.
+         *
+         * If a travel request is provided in the update request,
+         * validate it and update it.
+         * Otherwise, keep the existing travel request.
+         */
+        if (updatedBooking.getTravelRequest() != null
+                && updatedBooking.getTravelRequest().getId() != null) {
+
+            TravelRequest travelRequest = travelRequestRepository
+                    .findById(updatedBooking.getTravelRequest().getId())
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Travel request not found"
+                    ));
+
+            if (travelRequest.getStatus() != null
+                    && !travelRequest.getStatus().name().equals("APPROVED")) {
+                throw new IllegalArgumentException(
+                        "Only approved travel requests can be linked to a booking"
+                );
+            }
+
+            existingBooking.setTravelRequest(travelRequest);
+        }
+
+        if (updatedBooking.getBookingType() != null) {
+            existingBooking.setBookingType(updatedBooking.getBookingType());
+        }
+
+        if (updatedBooking.getBookingReference() != null) {
+            existingBooking.setBookingReference(
+                    updatedBooking.getBookingReference()
+            );
+        }
+
+        if (updatedBooking.getProvider() != null) {
+            existingBooking.setProvider(updatedBooking.getProvider());
+        }
+
+        if (updatedBooking.getCost() != null) {
+            existingBooking.setCost(updatedBooking.getCost());
+        }
+
+        if (updatedBooking.getSavings() != null) {
+            existingBooking.setSavings(updatedBooking.getSavings());
+        }
+
+        if (updatedBooking.getNotes() != null) {
+            existingBooking.setNotes(updatedBooking.getNotes());
+        }
 
         return bookingRepository.save(existingBooking);
     }

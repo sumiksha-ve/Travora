@@ -1,6 +1,7 @@
 package com.traveldesk.backend.travelrequest;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -30,14 +31,18 @@ public class TravelRequestController {
     }
 
     @PostMapping
+    @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.CREATED)
     public TravelRequest createTravelRequest(
             @RequestBody TravelRequest travelRequest
     ) {
-        return travelRequestService.createTravelRequest(travelRequest);
+        return travelRequestService.createTravelRequest(
+                travelRequest
+        );
     }
 
     @PatchMapping("/{id}/approve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER')")
     public TravelRequest approveTravelRequest(
             @PathVariable Long id,
             @RequestBody ApprovalDecision decision
@@ -49,6 +54,7 @@ public class TravelRequestController {
     }
 
     @PatchMapping("/{id}/reject")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER')")
     public TravelRequest rejectTravelRequest(
             @PathVariable Long id,
             @RequestBody ApprovalDecision decision
