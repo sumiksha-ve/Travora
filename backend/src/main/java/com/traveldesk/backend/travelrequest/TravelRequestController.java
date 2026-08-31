@@ -1,8 +1,7 @@
 package com.traveldesk.backend.travelrequest;
 
-import com.traveldesk.backend.employee.Employee;
-import com.traveldesk.backend.employee.EmployeeRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -11,35 +10,58 @@ import java.util.List;
 @RequestMapping("/api/travel-requests")
 public class TravelRequestController {
 
-    private final TravelRequestRepository travelRequestRepository;
-    private final EmployeeRepository employeeRepository;
+    private final TravelRequestService travelRequestService;
 
     public TravelRequestController(
-            TravelRequestRepository travelRequestRepository,
-            EmployeeRepository employeeRepository
+            TravelRequestService travelRequestService
     ) {
-        this.travelRequestRepository = travelRequestRepository;
-        this.employeeRepository = employeeRepository;
+        this.travelRequestService = travelRequestService;
     }
 
     @GetMapping
     public List<TravelRequest> getAllTravelRequests() {
-        return travelRequestRepository.findAll();
+        return travelRequestService.getAllTravelRequests();
+    }
+
+    @GetMapping("/{id}")
+    public TravelRequest getTravelRequestById(
+            @PathVariable Long id
+    ) {
+        return travelRequestService.getTravelRequestById(id);
     }
 
     @PostMapping
+    @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.CREATED)
     public TravelRequest createTravelRequest(
             @RequestBody TravelRequest travelRequest
     ) {
-        Long employeeId = travelRequest.getEmployee().getId();
+        return travelRequestService.createTravelRequest(
+                travelRequest
+        );
+    }
 
-        Employee employee = employeeRepository.findById(employeeId)
-                .orElseThrow(() -> new RuntimeException("Employee not found"));
+    @PatchMapping("/{id}/approve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER')")
+    public TravelRequest approveTravelRequest(
+            @PathVariable Long id,
+            @RequestBody ApprovalDecision decision
+    ) {
+        return travelRequestService.approveTravelRequest(
+                id,
+                decision
+        );
+    }
 
-        travelRequest.setEmployee(employee);
-        travelRequest.setStatus(TravelRequestStatus.PENDING);
-
-        return travelRequestRepository.save(travelRequest);
+    @PatchMapping("/{id}/reject")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER')")
+    public TravelRequest rejectTravelRequest(
+            @PathVariable Long id,
+            @RequestBody ApprovalDecision decision
+    ) {
+        return travelRequestService.rejectTravelRequest(
+                id,
+                decision
+        );
     }
 }
