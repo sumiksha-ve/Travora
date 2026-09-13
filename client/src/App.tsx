@@ -42,7 +42,7 @@ import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { clearAuth, getStoredUser, getToken, login as loginApi, persistAuth, travelRequestsApi, dashboardApi, employeesApi, bookingsApi, type AuthUser, type Role } from "./lib/api";
+import { AUTH_EXPIRED_EVENT, clearAuth, getStoredUser, getToken, isValidAuthUser, login as loginApi, persistAuth, travelRequestsApi, dashboardApi, employeesApi, bookingsApi, type AuthUser, type Role } from "./lib/api";
 
 type Journey = {
   id: string;
@@ -56,13 +56,6 @@ type Journey = {
   booking?: string;
   passenger?: string;
 };
-
-const previewJourneys: Journey[] = [
-  { id: "TRV-1048", destination: "Singapore", from: "Bengaluru", to: "Singapore", dates: "24–28 Sep 2026", tripType: "Business", project: "APAC launch", status: "Approved", booking: "Awaiting ticket" },
-  { id: "TRV-1039", destination: "London", from: "Mumbai", to: "London", dates: "10–14 Aug 2026", tripType: "Business", project: "Client advisory", status: "Booked", booking: "AI 131 · Confirmed" },
-  { id: "TRV-1027", destination: "Dubai", from: "Delhi", to: "Dubai", dates: "02–05 Jul 2026", tripType: "Business", project: "Partner summit", status: "Completed", booking: "EK 511 · Completed" },
-  { id: "TRV-1016", destination: "Frankfurt", from: "Bengaluru", to: "Frankfurt", dates: "16–20 Jun 2026", tripType: "Business", project: "Platform migration", status: "Pending approval" },
-];
 
 type BackendRequest = Record<string, any>;
 
@@ -96,12 +89,6 @@ function useTravelRequests() {
   return { journeys, loading, error };
 }
 
-const approverRequests = [
-  { id: "TRV-1051", employee: "R. Sharma", team: "Enterprise Sales", route: "Bengaluru → Singapore", dates: "29 Sep – 02 Oct", project: "APAC launch", amount: "₹ 78,400" },
-  { id: "TRV-1050", employee: "N. Mehta", team: "Product", route: "Delhi → Amsterdam", dates: "04 – 09 Oct", project: "Design partner week", amount: "₹ 96,200" },
-  { id: "TRV-1049", employee: "S. Iyer", team: "Engineering", route: "Hyderabad → London", dates: "11 – 16 Oct", project: "Platform migration", amount: "₹ 1,12,800" },
-];
-
 const pageMeta: Record<string, { eyebrow: string; title: string; description?: string }> = {
   "/employee": { eyebrow: "Employee workspace", title: "Overview", description: "Your travel activity, requests and next steps in one place." },
   "/employee/plan-trip": { eyebrow: "Employee workspace", title: "Plan a trip", description: "Create a travel request with the details your approver needs." },
@@ -126,7 +113,6 @@ const navByRole: Record<Role, { label: string; href: string; icon: ReactNode }[]
     { label: "Overview", href: "/employee", icon: <LayoutDashboard size={17} /> },
     { label: "Plan a trip", href: "/employee/plan-trip", icon: <Plus size={17} /> },
     { label: "My journeys", href: "/employee/journeys", icon: <Compass size={17} /> },
-    { label: "Approvals", href: "/employee/approvals", icon: <FileCheck2 size={17} /> },
     { label: "Reports", href: "/employee/reports", icon: <BarChart3 size={17} /> },
     { label: "Support", href: "/employee/support", icon: <CircleHelp size={17} /> },
   ],
@@ -363,13 +349,18 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
 
 function AppRouter() {
   const [location, setLocation] = useLocation();
-  const [user, setUser] = useState<AuthUser | null>(() => getToken() ? getStoredUser<AuthUser>() : null);
+  const [user, setUser] = useState<AuthUser | null>(() => { const stored = getStoredUser<AuthUser>(); return getToken() && isValidAuthUser(stored) ? stored : null; });
   const path = location === "/" ? "/employee" : location;
   const role = user?.role;
   const roleRoots: Record<Role, string> = { EMPLOYEE: "/employee", APPROVER: "/approver", TRAVEL_DESK: "/travel-desk", ADMIN: "/admin" };
-  const protectedPrefixes: Record<Role, string[]> = { EMPLOYEE: ["/employee"], APPROVER: ["/approver"], TRAVEL_DESK: ["/travel-desk"], ADMIN: ["/admin"] };
+  const allowedPaths: Record<Role, string[]> = { EMPLOYEE: ["/employee", "/employee/plan-trip", "/employee/journeys", "/employee/reports", "/employee/support"], APPROVER: ["/approver", "/approver/history"], TRAVEL_DESK: ["/travel-desk", "/travel-desk/bookings", "/travel-desk/cancellations"], ADMIN: ["/admin", "/admin/employees", "/admin/requests", "/admin/bookings", "/admin/reports", "/admin/settings"] };
   const onLogout = () => { clearAuth(); setUser(null); setLocation("/login"); };
-  const allowed = user && role ? protectedPrefixes[role].some((prefix) => path === prefix || path.startsWith(`${prefix}/`)) || (role !== "EMPLOYEE" && path === "/employee/reports") || (role !== "EMPLOYEE" && path === "/employee/support") : false;
+  const allowed = user && role ? allowedPaths[role].includes(path) : false;
+  useEffect(() => {
+    const handleAuthExpired = () => { setUser(null); setLocation("/login"); };
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, [setLocation]);
   useEffect(() => { if (!user && location !== "/login") setLocation("/login"); else if (user && location === "/login") setLocation(roleRoots[user.role]); else if (user && !allowed) setLocation(roleRoots[user.role]); }, [user, location, allowed, setLocation]);
   if (location === "/login") return <Login onAuthenticated={(nextUser) => { setUser(nextUser); setLocation(roleRoots[nextUser.role]); }} />;
   if (!user || !role) return null;

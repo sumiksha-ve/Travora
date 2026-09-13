@@ -34,9 +34,6 @@ button { border: 0; }
 .nav-item.active svg:first-child { color: var(--saffron); }
 .nav-chevron { margin-left: auto; color: #9bb0ac; }
 .sidebar-spacer { flex: 1; min-height: 32px; }
-.role-select-wrap { display: flex; align-items: center; gap: 8px; margin: 0 4px 15px; padding: 9px 9px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; color: #8daaa4; }
-.role-select-wrap select { width: 100%; color: #c8dad4; background: transparent; border: 0; outline: 0; font-size: 11px; }
-.role-select-wrap option { color: var(--ink); }
 .sidebar-profile { display: flex; align-items: center; gap: 9px; padding: 14px 10px 13px; border-top: 1px solid rgba(255,255,255,.1); }
 .sidebar-profile .icon-button { color: #7d9994; }
 .logout-link { display: flex; align-items: center; gap: 10px; color: #8ea6a0; font-size: 11px; padding: 9px 10px; transition: color .18s ease; }

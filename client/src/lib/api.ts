@@ -4,12 +4,28 @@ export type Role = "EMPLOYEE" | "APPROVER" | "TRAVEL_DESK" | "ADMIN";
 export type AuthUser = { id: number; username: string; role: Role; employeeId?: string | null; token?: string };
 export type ApiRequestOptions = RequestInit & { skipAuth?: boolean };
 
-export function getToken() { return window.localStorage.getItem("travora_token"); }
+export const AUTH_EXPIRED_EVENT = "travora:auth-expired";
+const VALID_ROLES: Role[] = ["EMPLOYEE", "APPROVER", "TRAVEL_DESK", "ADMIN"];
+
+export function getToken() {
+  const token = window.localStorage.getItem("travora_token");
+  return token?.trim() || null;
+}
 
 export function getStoredUser<T = AuthUser>(): T | null {
   const raw = window.localStorage.getItem("travora_user");
   if (!raw) return null;
   try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
+export function isValidAuthUser(user: AuthUser | null): user is AuthUser {
+  return Boolean(user && Number.isFinite(user.id) && user.username && VALID_ROLES.includes(user.role));
+}
+
+export function clearAuth({ notify = false }: { notify?: boolean } = {}) {
+  window.localStorage.removeItem("travora_token");
+  window.localStorage.removeItem("travora_user");
+  if (notify) window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
@@ -28,7 +44,8 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   let data: unknown = null;
   try { data = body ? JSON.parse(body) : null; } catch { data = body || null; }
   if (response.status === 401) {
-    clearAuth();
+    if (skipAuth) throw new Error("Invalid username or password.");
+    clearAuth({ notify: true });
     throw new Error("Your session has expired. Please sign in again.");
   }
   if (response.status === 403) throw new Error("You don't have permission to access this area.");
@@ -40,17 +57,18 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 }
 
 export async function login(credentials: { username: string; password: string }) {
-  return apiRequest<AuthUser>("/api/auth/login", { method: "POST", body: JSON.stringify(credentials), skipAuth: true });
+  const response = await apiRequest<Partial<AuthUser> & { token?: string; role?: string }>("/api/auth/login", { method: "POST", body: JSON.stringify(credentials), skipAuth: true });
+  const role = String(response.role || "").toUpperCase() as Role;
+  if (!response.token || !response.username || !VALID_ROLES.includes(role) || response.id === undefined || response.id === null) {
+    throw new Error("Travora returned an incomplete authentication response. Please contact your administrator.");
+  }
+  return { ...response, id: Number(response.id), role, token: response.token } as AuthUser;
 }
 
 export function persistAuth(user: AuthUser) {
-  window.localStorage.setItem("travora_token", user.token || "");
-  window.localStorage.setItem("travora_user", JSON.stringify(user));
-}
-
-export function clearAuth() {
-  window.localStorage.removeItem("travora_token");
-  window.localStorage.removeItem("travora_user");
+  if (!user.token) throw new Error("Cannot create an authenticated session without a JWT.");
+  window.localStorage.setItem("travora_token", user.token);
+  window.localStorage.setItem("travora_user", JSON.stringify({ id: user.id, username: user.username, role: user.role, employeeId: user.employeeId ?? null }));
 }
 
 export const travelRequestsApi = {
