@@ -4,6 +4,7 @@ import com.traveldesk.backend.auth.User;
 import com.traveldesk.backend.auth.UserRepository;
 import com.traveldesk.backend.employee.Employee;
 import com.traveldesk.backend.employee.EmployeeRepository;
+import com.traveldesk.backend.notification.NotificationService;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
@@ -20,15 +21,18 @@ public class TravelRequestService {
     private final TravelRequestRepository travelRequestRepository;
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     public TravelRequestService(
             TravelRequestRepository travelRequestRepository,
             EmployeeRepository employeeRepository,
-            UserRepository userRepository
+            UserRepository userRepository,
+            NotificationService notificationService
     ) {
         this.travelRequestRepository = travelRequestRepository;
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
 
     public List<TravelRequest> getAllTravelRequests() {
@@ -138,7 +142,9 @@ public class TravelRequestService {
         travelRequest.setApprovalComment(null);
         travelRequest.setApprovalDate(null);
 
-        return travelRequestRepository.save(travelRequest);
+        TravelRequest saved = travelRequestRepository.save(travelRequest);
+        notificationService.requestSubmitted(saved);
+        return saved;
     }
 
     public TravelRequest approveTravelRequest(
@@ -212,7 +218,9 @@ public class TravelRequestService {
                 LocalDateTime.now()
         );
 
-        return travelRequestRepository.save(travelRequest);
+        TravelRequest saved = travelRequestRepository.save(travelRequest);
+        notificationService.requestDecision(saved, newStatus == TravelRequestStatus.APPROVED);
+        return saved;
     }
 
     private User getCurrentUser() {

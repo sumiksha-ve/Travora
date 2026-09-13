@@ -2,6 +2,7 @@ package com.traveldesk.backend.booking;
 
 import com.traveldesk.backend.travelrequest.TravelRequest;
 import com.traveldesk.backend.travelrequest.TravelRequestRepository;
+import com.traveldesk.backend.notification.NotificationService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -12,13 +13,16 @@ public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final TravelRequestRepository travelRequestRepository;
+    private final NotificationService notificationService;
 
     public BookingService(
             BookingRepository bookingRepository,
-            TravelRequestRepository travelRequestRepository
+            TravelRequestRepository travelRequestRepository,
+            NotificationService notificationService
     ) {
         this.bookingRepository = bookingRepository;
         this.travelRequestRepository = travelRequestRepository;
+        this.notificationService = notificationService;
     }
 
     public List<Booking> getAllBookings() {
@@ -70,7 +74,9 @@ public class BookingService {
             booking.setSavings(BigDecimal.ZERO);
         }
 
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        notificationService.bookingCreated(saved);
+        return saved;
     }
 
     public Booking updateBooking(Long id, Booking updatedBooking) {
@@ -144,7 +150,9 @@ public class BookingService {
         booking.setCancellationReason(reason);
         booking.setCancellationCharge(cancellationCharge);
 
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        notificationService.bookingCancelled(saved);
+        return saved;
     }
 
     public void deleteBooking(Long id) {

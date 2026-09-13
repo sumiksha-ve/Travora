@@ -42,7 +42,7 @@ import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { AUTH_EXPIRED_EVENT, clearAuth, getStoredUser, getToken, isValidAuthUser, login as loginApi, persistAuth, travelRequestsApi, dashboardApi, employeesApi, bookingsApi, type AuthUser, type Role } from "./lib/api";
+import { AUTH_EXPIRED_EVENT, clearAuth, getStoredUser, getToken, isValidAuthUser, login as loginApi, persistAuth, travelRequestsApi, dashboardApi, employeesApi, bookingsApi, notificationsApi, type AuthUser, type Role } from "./lib/api";
 
 type Journey = {
   id: string;
@@ -211,10 +211,26 @@ function Topbar({ onMenu, meta, user }: { onMenu: () => void; meta: { title: str
   return (
     <header className="topbar">
       <div className="topbar-left"><button className="icon-button mobile-only" aria-label="Open navigation" onClick={onMenu}><Menu size={20} /></button><div className="breadcrumb"><span>Travora</span><ChevronRight size={14} /><strong>{meta.title}</strong></div></div>
-      <div className="topbar-actions"><button className="icon-button" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><button className="icon-button notification-button" aria-label="Notifications" onClick={() => toast("You are all caught up.")}><Bell size={18} /><span className="notification-dot" /></button><div className="topbar-divider" /><div className="topbar-user"><div className="avatar avatar-small">{initials}</div><div className="topbar-user-copy"><strong>{user.username}</strong><span>{roleLabels[user.role]}</span></div><ChevronDown size={15} className="muted-icon" /></div></div>
+      <div className="topbar-actions"><button className="icon-button" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><NotificationBell /><div className="topbar-divider" /><div className="topbar-user"><div className="avatar avatar-small">{initials}</div><div className="topbar-user-copy"><strong>{user.username}</strong><span>{roleLabels[user.role]}</span></div><ChevronDown size={15} className="muted-icon" /></div></div>
     </header>
   );
 }
+
+
+function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<any[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const loadCount = () => notificationsApi.unreadCount().then((count) => setUnread(Number(count) || 0)).catch(() => undefined);
+  useEffect(() => { loadCount(); }, []);
+  useEffect(() => { if (!open) return; setLoading(true); setError(""); notificationsApi.list().then((data) => setItems(Array.isArray(data) ? data : [])).catch((requestError) => setError(requestError instanceof Error ? requestError.message : "Notifications are unavailable.")).finally(() => setLoading(false)); }, [open]);
+  async function markRead(id: string | number) { try { await notificationsApi.markRead(id); setItems((current) => current.map((item) => item.id === id ? { ...item, read: true } : item)); setUnread((count) => Math.max(0, count - 1)); } catch (requestError) { toast.error(requestError instanceof Error ? requestError.message : "Notification could not be updated."); } }
+  async function markAllRead() { try { await notificationsApi.markAllRead(); setItems((current) => current.map((item) => ({ ...item, read: true }))); setUnread(0); } catch (requestError) { toast.error(requestError instanceof Error ? requestError.message : "Notifications could not be updated."); } }
+  return <div className="notification-wrap"><button className="icon-button notification-button" aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`} aria-expanded={open} onClick={() => setOpen((value) => !value)}><Bell size={18} />{unread > 0 && <span className="notification-count">{unread > 9 ? "9+" : unread}</span>}</button>{open && <><button className="notification-dismiss" aria-label="Close notifications" onClick={() => setOpen(false)} /><section className="notification-panel" aria-label="Notifications"><div className="notification-panel-header"><div><span className="card-kicker">TRAVORA INBOX</span><h2>Notifications</h2></div>{unread > 0 && <button className="text-link" onClick={markAllRead}>Mark all as read</button>}</div>{loading ? <div className="notification-state"><Clock3 size={18} /> Loading notifications…</div> : error ? <div className="notification-state notification-error"><XCircle size={18} />{error}</div> : items.length ? <div className="notification-list">{items.map((item) => <button className={`notification-item ${item.read ? "read" : "unread"}`} key={item.id} onClick={() => !item.read && markRead(item.id)}><span className={`notification-type notification-type-${String(item.type || "").toLowerCase()}`}><Bell size={14} /></span><span className="notification-copy"><strong>{item.title}</strong><span>{item.message}</span><small>{formatNotificationTime(item.createdAt)}</small></span>{!item.read && <span className="notification-unread-dot" />}</button>)}</div> : <div className="notification-state"><Bell size={20} /><strong>You’re all caught up</strong><span>Important travel activity will appear here.</span></div>}</section></>}</div>;
+}
+function formatNotificationTime(value: unknown) { if (!value) return "Just now"; const date = new Date(String(value)); if (Number.isNaN(date.getTime())) return String(value); const minutes = Math.max(0, Math.floor((Date.now() - date.getTime()) / 60000)); if (minutes < 1) return "Just now"; if (minutes < 60) return `${minutes}m ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours}h ago`; return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(date); }
 
 function AppShell({ children, role, user, onLogout }: { children: ReactNode; role: Role; user: AuthUser; onLogout: () => void }) {
   const [location] = useLocation();

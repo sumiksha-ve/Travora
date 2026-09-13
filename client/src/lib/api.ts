@@ -87,6 +87,13 @@ export const bookingsApi = {
   cancel: (id: string, reason: string, cancellationCharge = 0) => apiRequest(`/api/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}&cancellationCharge=${cancellationCharge}`, { method: "PUT" }),
 };
 
+export const notificationsApi = {
+  list: () => apiRequest("/api/notifications"),
+  unreadCount: () => apiRequest<number>("/api/notifications/unread-count"),
+  markRead: (id: string | number) => apiRequest(`/api/notifications/${id}/read`, { method: "PATCH" }),
+  markAllRead: () => apiRequest("/api/notifications/read-all", { method: "PATCH" }),
+};
+
 export const employeesApi = { list: () => apiRequest("/api/employees"), getByEmployeeId: (id: string) => apiRequest(`/api/employees/employee-id/${encodeURIComponent(id)}`) };
 export const dashboardApi = { summary: () => apiRequest("/api/dashboard/summary") };
 export const API_CONFIG = { baseUrl: API_BASE_URL };
