@@ -50,6 +50,7 @@ public class DataInitializer {
 
                 admin.setRole(Role.ADMIN);
                 admin.setActive(true);
+                admin.setEmployeeId(null);
 
                 userRepository.save(admin);
 
