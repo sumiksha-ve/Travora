@@ -96,4 +96,5 @@ export const notificationsApi = {
 
 export const employeesApi = { list: () => apiRequest("/api/employees"), getByEmployeeId: (id: string) => apiRequest(`/api/employees/employee-id/${encodeURIComponent(id)}`) };
 export const dashboardApi = { summary: () => apiRequest("/api/dashboard/summary") };
+export const healthApi = { check: () => apiRequest<string>("/api/health") };
 export const API_CONFIG = { baseUrl: API_BASE_URL };
