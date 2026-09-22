@@ -211,7 +211,7 @@ function Topbar({ onMenu, meta, user }: { onMenu: () => void; meta: { title: str
   return (
     <header className="topbar">
       <div className="topbar-left"><button className="icon-button mobile-only" aria-label="Open navigation" onClick={onMenu}><Menu size={20} /></button><div className="breadcrumb"><span>Travora</span><ChevronRight size={14} /><strong>{meta.title}</strong></div></div>
-      <div className="topbar-actions"><button className="icon-button" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><NotificationBell /><div className="topbar-divider" /><div className="topbar-user"><div className="avatar avatar-small">{initials}</div><div className="topbar-user-copy"><strong>{user.username}</strong><span>{roleLabels[user.role]}</span></div><ChevronDown size={15} className="muted-icon" /></div></div>
+      <div className="topbar-actions"><button className="icon-button theme-toggle" title={`Switch to ${theme === "light" ? "dark" : "light"} mode`} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><NotificationBell /><div className="topbar-divider" /><div className="topbar-user"><div className="avatar avatar-small">{initials}</div><div className="topbar-user-copy"><strong>{user.username}</strong><span>{roleLabels[user.role]}</span></div><ChevronDown size={15} className="muted-icon" /></div></div>
     </header>
   );
 }

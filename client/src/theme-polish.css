@@ -1,0 +1,44 @@
+/* Phase 12: centralized shared-surface theme polish. Imported by index.css. */
+:root {
+  --surface-soft: #f7faf8;
+  --surface-muted: #f5f8f6;
+  --surface-input: #fbfcfb;
+  --surface-hover: #f1f6f3;
+  --overlay-soft: rgba(20, 34, 39, .38);
+}
+
+.dark {
+  --surface-soft: #1b2c2e;
+  --surface-muted: #203638;
+  --surface-input: #172a30;
+  --surface-hover: #243b40;
+  --overlay-soft: rgba(0, 0, 0, .58);
+}
+
+.dark .topbar { background: rgba(20, 35, 41, .94); border-color: var(--line); }
+.dark .theme-toggle { color: var(--saffron); background: #2a4146; }
+.dark .theme-toggle:hover { color: #fff; background: #355158; }
+.dark .sidebar-overlay.visible { background: var(--overlay-soft); }
+.dark .button-primary { color: #182329; }
+.dark .button-danger { color: #fff; }
+.dark .field input, .dark .field select, .dark .field textarea, .dark .search-field { background: var(--surface-input); color: var(--ink); }
+.dark .field input:focus, .dark .field select:focus, .dark .field textarea:focus { background: #1b3137; }
+.dark .booking-request-summary, .dark .booking-notes, .dark .cancellation-note, .dark .admin-request-detail, .dark .settings-note, .dark .settings-health { background: var(--surface-soft); }
+.dark .notification-item:hover, .dark .notification-item.unread { background: var(--surface-soft); }
+.dark .notification-type { background: #243a39; }
+.dark .responsive-table tbody tr:hover { background: var(--surface-hover); }
+.dark .responsive-table th { background: var(--surface-muted); }
+.dark .report-bar-track { background: #2a4144; }
+.dark .report-bar-track span { background: linear-gradient(90deg, var(--green), var(--saffron)); }
+.dark .settings-icon { background: #29433f; }
+.dark .settings-icon-saffron { background: #4b3d22; }
+.dark .empty-state, .dark .notification-state, .dark .booking-empty, .dark .booking-loading { color: var(--ink-muted); }
+.dark [data-sonner-toast] { color: var(--ink); border-color: var(--line); background: var(--surface); box-shadow: var(--shadow); }
+.dark [data-sonner-toast] [data-title] { color: var(--ink); }
+.dark [data-sonner-toast] [data-description] { color: var(--ink-soft); }
+.dark input[type="checkbox"], .dark input[type="radio"] { accent-color: var(--green); }
+.dark ::selection { color: var(--ink); background: #42675c; }
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle { transition: none; }
+}

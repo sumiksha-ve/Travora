@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "./theme-polish.css";
 
 :root { --ink: #182329; --ink-soft: #52616a; --ink-muted: #839099; --paper: #f5f7f5; --surface: #ffffff; --line: #e2e8e5; --navy: #1f353d; --navy-soft: #29444c; --saffron: #e7a947; --saffron-soft: #fff4de; --sage: #dce8df; --green: #398064; --blue: #547b91; --red: #b15b53; --radius: 16px; --shadow: 0 12px 35px rgba(24, 35, 41, .07); --ease: cubic-bezier(.23, 1, .32, 1); }
 
