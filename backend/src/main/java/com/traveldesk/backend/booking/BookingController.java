@@ -1,6 +1,7 @@
 package com.traveldesk.backend.booking;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -8,7 +9,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/bookings")
-@CrossOrigin(origins = "*")
 public class BookingController {
 
     private final BookingService bookingService;
@@ -18,16 +18,19 @@ public class BookingController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER', 'TRAVEL_DESK')")
     public ResponseEntity<List<Booking>> getAllBookings() {
         return ResponseEntity.ok(bookingService.getAllBookings());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER', 'TRAVEL_DESK')")
     public ResponseEntity<Booking> getBookingById(@PathVariable Long id) {
         return ResponseEntity.ok(bookingService.getBookingById(id));
     }
 
     @GetMapping("/travel-request/{travelRequestId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER', 'TRAVEL_DESK')")
     public ResponseEntity<List<Booking>> getBookingsByTravelRequest(
             @PathVariable Long travelRequestId) {
         return ResponseEntity.ok(
@@ -36,6 +39,7 @@ public class BookingController {
     }
 
     @GetMapping("/cancelled/{cancelled}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER', 'TRAVEL_DESK')")
     public ResponseEntity<List<Booking>> getBookingsByCancelledStatus(
             @PathVariable boolean cancelled) {
         return ResponseEntity.ok(
@@ -44,11 +48,13 @@ public class BookingController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRAVEL_DESK')")
     public ResponseEntity<Booking> createBooking(@RequestBody Booking booking) {
         return ResponseEntity.ok(bookingService.createBooking(booking));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRAVEL_DESK')")
     public ResponseEntity<Booking> updateBooking(
             @PathVariable Long id,
             @RequestBody Booking booking) {
@@ -58,6 +64,7 @@ public class BookingController {
     }
 
     @PutMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('ADMIN', 'TRAVEL_DESK')")
     public ResponseEntity<Booking> cancelBooking(
             @PathVariable Long id,
             @RequestParam String reason,
@@ -73,6 +80,7 @@ public class BookingController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deleteBooking(@PathVariable Long id) {
         bookingService.deleteBooking(id);
         return ResponseEntity.noContent().build();

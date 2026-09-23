@@ -8,6 +8,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.beans.factory.annotation.Value;
 
 @Configuration
 public class DataInitializer {
@@ -15,37 +16,41 @@ public class DataInitializer {
     @Bean
     CommandLineRunner initializeUsers(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            @Value("${TRAVORA_ADMIN_USERNAME:}") String adminUsername,
+            @Value("${TRAVORA_ADMIN_PASSWORD:}") String adminPassword
     ) {
         return args -> {
 
-            // Default ADMIN account
+            if (adminUsername == null || adminUsername.isBlank()
+                    || adminPassword == null || adminPassword.isBlank()) {
+                System.out.println("Admin bootstrap skipped: TRAVORA_ADMIN_USERNAME and TRAVORA_ADMIN_PASSWORD are not configured.");
+                return;
+            }
+
             User admin = userRepository
-                    .findByUsername("secureadmin")
+                    .findByUsername(adminUsername)
                     .orElse(null);
 
             if (admin == null) {
 
                 admin = new User();
 
-                admin.setUsername("secureadmin");
+                admin.setUsername(adminUsername);
                 admin.setPassword(
-                        passwordEncoder.encode("admin123")
+                        passwordEncoder.encode(adminPassword)
                 );
                 admin.setRole(Role.ADMIN);
                 admin.setActive(true);
 
                 userRepository.save(admin);
 
-                System.out.println(
-                        "Default ADMIN created: secureadmin / admin123"
-                );
+                System.out.println("Configured ADMIN bootstrap account created: " + adminUsername);
 
             } else {
 
-                // Ensure the default admin has the known password
                 admin.setPassword(
-                        passwordEncoder.encode("admin123")
+                        passwordEncoder.encode(adminPassword)
                 );
 
                 admin.setRole(Role.ADMIN);
@@ -54,9 +59,7 @@ public class DataInitializer {
 
                 userRepository.save(admin);
 
-                System.out.println(
-                        "Default ADMIN password reset: secureadmin / admin123"
-                );
+                System.out.println("Configured ADMIN bootstrap account synchronized: " + adminUsername);
             }
         };
     }
