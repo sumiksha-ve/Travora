@@ -3,7 +3,16 @@ package com.traveldesk.backend.booking;
 import com.traveldesk.backend.travelrequest.TravelRequest;
 import com.traveldesk.backend.travelrequest.TravelRequestRepository;
 import com.traveldesk.backend.notification.NotificationService;
+import com.traveldesk.backend.auth.Role;
+import com.traveldesk.backend.auth.User;
+import com.traveldesk.backend.auth.UserRepository;
+import com.traveldesk.backend.employee.Employee;
+import com.traveldesk.backend.employee.EmployeeRepository;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -14,15 +23,21 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final TravelRequestRepository travelRequestRepository;
     private final NotificationService notificationService;
+    private final UserRepository userRepository;
+    private final EmployeeRepository employeeRepository;
 
     public BookingService(
             BookingRepository bookingRepository,
             TravelRequestRepository travelRequestRepository,
-            NotificationService notificationService
+            NotificationService notificationService,
+            UserRepository userRepository,
+            EmployeeRepository employeeRepository
     ) {
         this.bookingRepository = bookingRepository;
         this.travelRequestRepository = travelRequestRepository;
         this.notificationService = notificationService;
+        this.userRepository = userRepository;
+        this.employeeRepository = employeeRepository;
     }
 
     public List<Booking> getAllBookings() {
@@ -35,7 +50,34 @@ public class BookingService {
     }
 
     public List<Booking> getBookingsByTravelRequest(Long travelRequestId) {
+        User currentUser = getCurrentUser();
+        if (currentUser.getRole() == Role.EMPLOYEE) {
+            Employee employee = getEmployeeForUser(currentUser);
+            TravelRequest travelRequest = travelRequestRepository.findById(travelRequestId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Travel request not found"));
+            if (travelRequest.getEmployee() == null
+                    || !travelRequest.getEmployee().getId().equals(employee.getId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only access bookings for your own travel requests");
+            }
+        }
         return bookingRepository.findByTravelRequestId(travelRequestId);
+    }
+
+    private User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated");
+        }
+        return userRepository.findByUsername(authentication.getName())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+    }
+
+    private Employee getEmployeeForUser(User user) {
+        if (user.getEmployeeId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User is not linked to an employee");
+        }
+        return employeeRepository.findByEmployeeId(user.getEmployeeId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Linked employee not found"));
     }
 
     public List<Booking> getBookingsByCancelledStatus(boolean cancelled) {

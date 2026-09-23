@@ -30,7 +30,7 @@ public class BookingController {
     }
 
     @GetMapping("/travel-request/{travelRequestId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER', 'TRAVEL_DESK')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'APPROVER', 'TRAVEL_DESK', 'EMPLOYEE')")
     public ResponseEntity<List<Booking>> getBookingsByTravelRequest(
             @PathVariable Long travelRequestId) {
         return ResponseEntity.ok(
