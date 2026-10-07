@@ -40,6 +40,8 @@ import {
   Upload,
   Image as ImageIcon,
   AlertCircle,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -432,17 +434,125 @@ function PlanTrip() {
   </div>;
 }
 
+function DeleteConfirmDialog({
+  title,
+  description,
+  confirmLabel = "Delete",
+  onConfirm,
+  onClose,
+  isDanger = true,
+}: {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  onConfirm: () => void | Promise<void>;
+  onClose: () => void;
+  isDanger?: boolean;
+}) {
+  const [loading, setLoading] = useState(false);
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true">
+      <div className="confirm-dialog">
+        <button type="button" className="icon-button dialog-close" onClick={onClose} aria-label="Close dialog">
+          <X size={18} />
+        </button>
+        <div className={`confirm-icon ${isDanger ? "reject" : "approve"}`}>
+          {isDanger ? <Trash2 size={22} /> : <RotateCcw size={22} />}
+        </div>
+        <span className="card-kicker">CONFIRM ACTION</span>
+        <h2>{title}</h2>
+        <p>{description}</p>
+        <div className="dialog-actions">
+          <button type="button" className="button button-ghost" onClick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={`button ${isDanger ? "button-danger" : "button-primary"}`}
+            disabled={loading}
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await onConfirm();
+              } finally {
+                setLoading(false);
+                onClose();
+              }
+            }}
+          >
+            {loading ? "Processing…" : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Journeys() {
-  const { journeys, loading, error } = useTravelRequests();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { journeys, loading, error } = useTravelRequests(refreshKey);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All journeys");
   const [selected, setSelected] = useState<Journey | null>(null);
   const [bookingsByRequest, setBookingsByRequest] = useState<Record<string, any | null>>({});
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState("");
-  useEffect(() => { let active = true; if (!journeys.length) { setBookingsByRequest({}); setBookingLoading(false); return; } const eligible = journeys.filter((journey) => ["Approved", "Booked", "Completed", "Cancelled"].includes(journey.status)); setBookingLoading(Boolean(eligible.length)); setBookingError(""); Promise.all(eligible.map(async (journey) => { try { const data = await bookingsApi.byTravelRequest(journey.id); return [journey.id, Array.isArray(data) ? data.find((booking: any) => booking && booking.cancelled !== true) || data[0] || null : data || null] as const; } catch (requestError) { throw requestError; } })).then((entries) => { if (active) setBookingsByRequest(Object.fromEntries(entries)); }).catch((requestError) => { if (active) setBookingError(requestError instanceof Error ? requestError.message : "Booking details are unavailable."); }).finally(() => { if (active) setBookingLoading(false); }); return () => { active = false; }; }, [journeys]);
-  const hydratedJourneys = useMemo(() => journeys.map((journey) => { const booking = bookingsByRequest[journey.id]; if (booking?.cancelled) return { ...journey, status: "Cancelled" as const }; if (booking && journey.status === "Approved") return { ...journey, status: "Booked" as const }; return journey; }), [journeys, bookingsByRequest]);
-  const filtered = useMemo(() => hydratedJourneys.filter((journey) => (filter === "All journeys" || journey.status === filter) && `${journey.destination} ${journey.project} ${journey.id}`.toLowerCase().includes(query.toLowerCase())), [hydratedJourneys, query, filter]);
+  const [confirmClearPast, setConfirmClearPast] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!journeys.length) {
+      setBookingsByRequest({});
+      setBookingLoading(false);
+      return;
+    }
+    const eligible = journeys.filter((journey) => ["Approved", "Booked", "Completed", "Cancelled"].includes(journey.status));
+    setBookingLoading(Boolean(eligible.length));
+    setBookingError("");
+    Promise.all(
+      eligible.map(async (journey) => {
+        try {
+          const data = await bookingsApi.byTravelRequest(journey.id);
+          return [journey.id, Array.isArray(data) ? data.find((booking: any) => booking && booking.cancelled !== true) || data[0] || null : data || null] as const;
+        } catch (requestError) {
+          throw requestError;
+        }
+      })
+    )
+      .then((entries) => {
+        if (active) setBookingsByRequest(Object.fromEntries(entries));
+      })
+      .catch((requestError) => {
+        if (active) setBookingError(requestError instanceof Error ? requestError.message : "Booking details are unavailable.");
+      })
+      .finally(() => {
+        if (active) setBookingLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [journeys]);
+
+  const hydratedJourneys = useMemo(
+    () =>
+      journeys.map((journey) => {
+        const booking = bookingsByRequest[journey.id];
+        if (booking?.cancelled) return { ...journey, status: "Cancelled" as const };
+        if (booking && journey.status === "Approved") return { ...journey, status: "Booked" as const };
+        return journey;
+      }),
+    [journeys, bookingsByRequest]
+  );
+
+  const filtered = useMemo(
+    () =>
+      hydratedJourneys.filter(
+        (journey) =>
+          (filter === "All journeys" || journey.status === filter) &&
+          `${journey.destination} ${journey.project} ${journey.id}`.toLowerCase().includes(query.toLowerCase())
+      ),
+    [hydratedJourneys, query, filter]
+  );
 
   const handleExportCsv = () => {
     const headers = ["Journey ID", "Destination", "From", "To", "Dates", "Trip Type", "Project", "Status"];
@@ -451,24 +561,324 @@ function Journeys() {
     toast.success("Journeys exported to CSV.");
   };
 
-  return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/employee/journeys"]} /><div className="panel table-panel"><div className="table-toolbar"><div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search journeys" /></div><div className="toolbar-filters"><Filter size={15} /><select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All journeys</option><option>Pending approval</option><option>Approved</option><option>Booked</option><option>Completed</option><option>Cancelled</option></select></div><div className="flex items-center gap-2"><button type="button" onClick={handleExportCsv} className="button button-ghost flex items-center gap-1.5"><Download size={14} /> Export CSV</button><Link href="/employee/plan-trip" className="button button-primary"><Plus size={16} /> Plan a trip</Link></div></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}{bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}{loading || bookingLoading ? <EmptyState icon={<Clock3 size={20} />} title="Loading journeys" description="Fetching your travel requests and booking records from Travora." /> : filtered.length ? <div className="responsive-table"><table><thead><tr><th>Journey</th><th>Dates</th><th>Project</th><th>Status</th><th /></tr></thead><tbody>{filtered.map((journey) => <tr key={journey.id} onClick={() => setSelected(journey)}><td><div className="table-journey"><span className="journey-icon"><Plane size={15} /></span><span><strong>{journey.destination}</strong><small>{journey.id} · {journey.from} → {journey.to}</small></span></div></td><td>{journey.dates}</td><td>{journey.project}</td><td><StatusBadge status={journey.status} /></td><td><button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setSelected(journey); }}>{bookingsByRequest[journey.id] ? "View booking" : "View details"} <ArrowUpRight size={14} /></button></td></tr>)}</tbody></table></div> : <EmptyState icon={<Compass size={20} />} title="No journeys yet" description="Your submitted travel requests will appear here." action={<Link className="button button-primary button-small" href="/employee/plan-trip">Plan a trip</Link>} />}</div>{selected && <JourneyDrawer journey={selected} onClose={() => setSelected(null)} />}</div>;
+  const handleClearPast = async () => {
+    await travelRequestsApi.deletePastOrCompleted();
+    toast.success("Past and completed trips have been removed.");
+    setRefreshKey((k) => k + 1);
+  };
+
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={pageMeta["/employee/journeys"]} />
+      <div className="panel table-panel">
+        <div className="table-toolbar">
+          <div className="search-field">
+            <Search size={16} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search journeys" />
+          </div>
+          <div className="toolbar-filters">
+            <Filter size={15} />
+            <select value={filter} onChange={(event) => setFilter(event.target.value)}>
+              <option>All journeys</option>
+              <option>Pending approval</option>
+              <option>Approved</option>
+              <option>Booked</option>
+              <option>Completed</option>
+              <option>Cancelled</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmClearPast(true)}
+              className="button button-ghost flex items-center gap-1.5"
+              title="Clear completed or cancelled trips from your journeys"
+            >
+              <Trash2 size={14} /> Clear past trips
+            </button>
+            <button type="button" onClick={handleExportCsv} className="button button-ghost flex items-center gap-1.5">
+              <Download size={14} /> Export CSV
+            </button>
+            <Link href="/employee/plan-trip" className="button button-primary">
+              <Plus size={16} /> Plan a trip
+            </Link>
+          </div>
+        </div>
+        {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+        {bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}
+        {loading || bookingLoading ? (
+          <EmptyState icon={<Clock3 size={20} />} title="Loading journeys" description="Fetching your travel requests and booking records from Travora." />
+        ) : filtered.length ? (
+          <div className="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Journey</th>
+                  <th>Dates</th>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((journey) => (
+                  <tr key={journey.id} onClick={() => setSelected(journey)}>
+                    <td>
+                      <div className="table-journey">
+                        <span className="journey-icon"><Plane size={15} /></span>
+                        <span>
+                          <strong>{journey.destination}</strong>
+                          <small>{journey.id} · {journey.from} → {journey.to}</small>
+                        </span>
+                      </div>
+                    </td>
+                    <td>{journey.dates}</td>
+                    <td>{journey.project}</td>
+                    <td><StatusBadge status={journey.status} /></td>
+                    <td>
+                      <button
+                        type="button"
+                        className="table-action"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelected(journey);
+                        }}
+                      >
+                        {bookingsByRequest[journey.id] ? "View booking" : "View details"} <ArrowUpRight size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={<Compass size={20} />}
+            title="No journeys found"
+            description="Your submitted travel requests will appear here."
+            action={<Link className="button button-primary button-small" href="/employee/plan-trip">Plan a trip</Link>}
+          />
+        )}
+      </div>
+      {selected && (
+        <JourneyDrawer
+          journey={selected}
+          onClose={() => setSelected(null)}
+          onDeleted={() => {
+            setSelected(null);
+            setRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+      {confirmClearPast && (
+        <DeleteConfirmDialog
+          title="Clear past and completed journeys?"
+          description="This will purge all completed and cancelled trips from your journeys list. Active pending and approved requests will remain intact."
+          confirmLabel="Clear past trips"
+          onConfirm={handleClearPast}
+          onClose={() => setConfirmClearPast(false)}
+        />
+      )}
+    </div>
+  );
 }
-function JourneyDrawer({ journey, onClose }: { journey: Journey; onClose: () => void }) {
+
+function JourneyDrawer({ journey, onClose, onDeleted }: { journey: Journey; onClose: () => void; onDeleted?: () => void }) {
   const [booking, setBooking] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   useEffect(() => {
     let active = true;
     setLoading(true);
-    bookingsApi.byTravelRequest(journey.id).then((data) => {
-      if (active) setBooking(Array.isArray(data) ? data.find((b: any) => !b?.cancelled) || data[0] || null : data || null);
-    }).catch((requestError) => {
-      if (active) setError(requestError instanceof Error ? requestError.message : "Booking details are unavailable.");
-    }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    bookingsApi
+      .byTravelRequest(journey.id)
+      .then((data) => {
+        if (active) setBooking(Array.isArray(data) ? data.find((b: any) => !b?.cancelled) || data[0] || null : data || null);
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError instanceof Error ? requestError.message : "Booking details are unavailable.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [journey.id]);
+
   const cancelled = Boolean(booking?.cancelled);
-  return <><div className="drawer-overlay" onClick={onClose} /><aside className="journey-drawer"><div className="drawer-header"><div><span className="card-kicker">JOURNEY DETAIL</span><h2>{journey.destination}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close journey detail"><X size={18} /></button></div><div className="drawer-route"><div><span>From</span><strong>{journey.from}</strong></div><Plane size={18} /><div><span>To</span><strong>{journey.to}</strong></div></div><div className="drawer-status"><StatusBadge status={cancelled ? "Cancelled" : journey.status} /><span>{journey.id}</span></div>{journey.status === "Approved" || journey.status === "Booked" || journey.status === "Completed" ? <div className="approver-box-approved"><ShieldCheck size={20} className="shrink-0" /><div><strong>✓ Approver Decision: Approved</strong><p style={{ fontSize: 12, margin: "2px 0 0" }}>Approved by {journey.approverName || "Assigned Manager"}{journey.approvalDate ? ` on ${formatRequestDate(journey.approvalDate)}` : ""}{journey.approvalComment ? ` · "${journey.approvalComment}"` : ""}. Authorized for ticketing.</p></div></div> : journey.status === "Pending approval" ? <div className="approver-box-pending"><Clock3 size={20} className="shrink-0" /><div><strong>⏳ Not Approved Yet (Pending Approver)</strong><p style={{ fontSize: 12, margin: "2px 0 0" }}>This request is visible to the Travel Desk for advance preparation. Approver sign-off is pending.</p></div></div> : null}<div className="drawer-details"><Detail label="Travel dates" value={journey.dates} icon={<CalendarDays size={16} />} /><Detail label="Trip type" value={journey.tripType} icon={<BriefcaseBusiness size={16} />} /><Detail label="Project" value={journey.project} icon={<FileText size={16} />} /></div><div className="drawer-booking-details"><div className="section-title-row"><div><span className="card-kicker">TICKET DETAILS</span><h3 className="section-heading">Booking record</h3></div><TicketCheck size={17} className="panel-icon" /></div>{loading ? <div className="booking-loading"><Clock3 size={15} /> Loading booking details…</div> : error ? <div className="form-error-message"><XCircle size={15} />{error}</div> : booking ? <div className="booking-detail-list"><Detail label="Status" value={cancelled ? "Cancelled" : "Booked"} icon={<Check size={16} />} /><Detail label="Booking type" value={booking.bookingType || "—"} icon={<TicketCheck size={16} />} /><Detail label="Reference" value={booking.bookingReference || "—"} icon={<FileText size={16} />} /><Detail label="Provider" value={booking.provider || "—"} icon={<Compass size={16} />} /><Detail label="Cost" value={booking.cost !== null && booking.cost !== undefined ? String(booking.cost) : "—"} icon={<WalletCards size={16} />} /><Detail label="Savings" value={booking.savings !== null && booking.savings !== undefined ? String(booking.savings) : "—"} icon={<Sparkles size={16} />} /><Detail label="Booked on" value={formatRequestDate(booking.bookedAt)} icon={<CalendarDays size={16} />} />{booking.notes && <div className="booking-notes"><small>Notes</small><p>{booking.notes}</p></div>}{cancelled && <div className="booking-notes cancellation-note"><small>Cancellation</small><p>{booking.cancellationReason || "Cancelled"}{booking.cancellationCharge !== null && booking.cancellationCharge !== undefined ? ` · Charge ${booking.cancellationCharge}` : ""}</p></div>}{booking.attachmentData && <div className="ticket-attachment-card"><span className="card-kicker">ATTACHED TICKET / BOARDING PASS</span>{booking.attachmentType?.includes("image") ? <img src={booking.attachmentData} alt="Ticket preview" className="ticket-attachment-preview" /> : <div className="ticket-doc-card"><FileText size={22} className="text-red-500 shrink-0" /><div style={{ flex: 1, minWidth: 0 }}><strong style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{booking.attachmentName || "ticket.pdf"}</strong><small style={{ fontSize: 11, opacity: 0.75 }}>PDF Ticket Document</small></div></div>}<a href={booking.attachmentData} download={booking.attachmentName || "ticket"} target="_blank" rel="noreferrer" className="button button-small button-primary" style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%" }}><Download size={13} /> View / Download {booking.attachmentType?.includes("pdf") ? "PDF Ticket" : "Ticket Photo"}</a></div>}</div> : <div className="booking-empty"><TicketCheck size={17} /><span>Booking details are not available yet.</span></div>}</div><div className="drawer-timeline"><span className="card-kicker">LIFECYCLE</span><TimelineItem label="Request submitted" done /><TimelineItem label="Manager approval" done={journey.status !== "Pending approval"} /><TimelineItem label="Travel desk booking" done={Boolean(booking) && !cancelled} /><TimelineItem label="Trip completed" done={journey.status === "Completed"} last /></div></aside></>;
+
+  return (
+    <>
+      <div className="drawer-overlay" onClick={onClose} />
+      <aside className="journey-drawer">
+        <div className="drawer-header">
+          <div>
+            <span className="card-kicker">JOURNEY DETAIL</span>
+            <h2>{journey.destination}</h2>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close journey detail">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="drawer-route">
+          <div>
+            <span>From</span>
+            <strong>{journey.from}</strong>
+          </div>
+          <Plane size={18} />
+          <div>
+            <span>To</span>
+            <strong>{journey.to}</strong>
+          </div>
+        </div>
+        <div className="drawer-status">
+          <StatusBadge status={cancelled ? "Cancelled" : journey.status} />
+          <span>{journey.id}</span>
+        </div>
+        {journey.status === "Approved" || journey.status === "Booked" || journey.status === "Completed" ? (
+          <div className="approver-box-approved">
+            <ShieldCheck size={20} className="shrink-0" />
+            <div>
+              <strong>✓ Approver Decision: Approved</strong>
+              <p style={{ fontSize: 12, margin: "2px 0 0" }}>
+                Approved by {journey.approverName || "Assigned Manager"}
+                {journey.approvalDate ? ` on ${formatRequestDate(journey.approvalDate)}` : ""}
+                {journey.approvalComment ? ` · "${journey.approvalComment}"` : ""}. Authorized for ticketing.
+              </p>
+            </div>
+          </div>
+        ) : journey.status === "Pending approval" ? (
+          <div className="approver-box-pending">
+            <Clock3 size={20} className="shrink-0" />
+            <div>
+              <strong>⏳ Not Approved Yet (Pending Approver)</strong>
+              <p style={{ fontSize: 12, margin: "2px 0 0" }}>
+                This request is visible to the Travel Desk for advance preparation. Approver sign-off is pending.
+              </p>
+            </div>
+          </div>
+        ) : null}
+        <div className="drawer-details">
+          <Detail label="Travel dates" value={journey.dates} icon={<CalendarDays size={16} />} />
+          <Detail label="Trip type" value={journey.tripType} icon={<BriefcaseBusiness size={16} />} />
+          <Detail label="Project" value={journey.project} icon={<FileText size={16} />} />
+        </div>
+        <div className="drawer-booking-details">
+          <div className="section-title-row">
+            <div>
+              <span className="card-kicker">TICKET DETAILS</span>
+              <h3 className="section-heading">Booking record</h3>
+            </div>
+            <TicketCheck size={17} className="panel-icon" />
+          </div>
+          {loading ? (
+            <div className="booking-loading">
+              <Clock3 size={15} /> Loading booking details…
+            </div>
+          ) : error ? (
+            <div className="form-error-message">
+              <XCircle size={15} />
+              {error}
+            </div>
+          ) : booking ? (
+            <div className="booking-detail-list">
+              <Detail label="Status" value={cancelled ? "Cancelled" : "Booked"} icon={<Check size={16} />} />
+              <Detail label="Booking type" value={booking.bookingType || "—"} icon={<TicketCheck size={16} />} />
+              <Detail label="Reference" value={booking.bookingReference || "—"} icon={<FileText size={16} />} />
+              <Detail label="Provider" value={booking.provider || "—"} icon={<Compass size={16} />} />
+              <Detail label="Cost" value={booking.cost !== null && booking.cost !== undefined ? String(booking.cost) : "—"} icon={<WalletCards size={16} />} />
+              <Detail label="Savings" value={booking.savings !== null && booking.savings !== undefined ? String(booking.savings) : "—"} icon={<Sparkles size={16} />} />
+              <Detail label="Booked on" value={formatRequestDate(booking.bookedAt)} icon={<CalendarDays size={16} />} />
+              {booking.notes && (
+                <div className="booking-notes">
+                  <small>Notes</small>
+                  <p>{booking.notes}</p>
+                </div>
+              )}
+              {cancelled && (
+                <div className="booking-notes cancellation-note">
+                  <small>Cancellation</small>
+                  <p>
+                    {booking.cancellationReason || "Cancelled"}
+                    {booking.cancellationCharge !== null && booking.cancellationCharge !== undefined ? ` · Charge ${booking.cancellationCharge}` : ""}
+                  </p>
+                </div>
+              )}
+              {booking.attachmentData && (
+                <div className="ticket-attachment-card">
+                  <span className="card-kicker">ATTACHED TICKET / BOARDING PASS</span>
+                  {booking.attachmentType?.includes("image") ? (
+                    <img src={booking.attachmentData} alt="Ticket preview" className="ticket-attachment-preview" />
+                  ) : (
+                    <div className="ticket-doc-card">
+                      <FileText size={22} className="text-red-500 shrink-0" />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <strong style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {booking.attachmentName || "ticket.pdf"}
+                        </strong>
+                        <small style={{ fontSize: 11, opacity: 0.75 }}>PDF Ticket Document</small>
+                      </div>
+                    </div>
+                  )}
+                  <a
+                    href={booking.attachmentData}
+                    download={booking.attachmentName || "ticket"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="button button-small button-primary"
+                    style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%" }}
+                  >
+                    <Download size={13} /> View / Download {booking.attachmentType?.includes("pdf") ? "PDF Ticket" : "Ticket Photo"}
+                  </a>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="booking-empty">
+              <TicketCheck size={17} />
+              <span>Booking details are not available yet.</span>
+            </div>
+          )}
+        </div>
+        <div className="drawer-timeline">
+          <span className="card-kicker">LIFECYCLE</span>
+          <TimelineItem label="Request submitted" done />
+          <TimelineItem label="Manager approval" done={journey.status !== "Pending approval"} />
+          <TimelineItem label="Travel desk booking" done={Boolean(booking) && !cancelled} />
+          <TimelineItem label="Trip completed" done={journey.status === "Completed"} last />
+        </div>
+        <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <small style={{ color: "var(--ink-muted)", fontSize: 11 }}>Cancel or remove this journey?</small>
+          <button
+            type="button"
+            className="button button-danger button-small"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={13} /> Delete this trip
+          </button>
+        </div>
+      </aside>
+      {confirmDelete && (
+        <DeleteConfirmDialog
+          title={`Delete journey #${journey.id}?`}
+          description={`Permanently remove journey to ${journey.destination} (${journey.project}) and any associated booking record?`}
+          confirmLabel="Delete trip"
+          onConfirm={async () => {
+            await travelRequestsApi.delete(journey.id);
+            toast.success(`Journey #${journey.id} deleted.`);
+            onClose();
+            if (onDeleted) onDeleted();
+          }}
+          onClose={() => setConfirmDelete(false)}
+        />
+      )}
+    </>
+  );
 }
 function Detail({ label, value, icon }: { label: string; value: string; icon: ReactNode }) { return <div className="detail-row"><span className="detail-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong></span></div>; }
 function TimelineItem({ label, done, last }: { label: string; done?: boolean; last?: boolean }) { return <div className={`timeline-item ${done ? "done" : ""} ${last ? "last" : ""}`}><span className="timeline-dot">{done && <Check size={11} />}</span><span>{label}</span></div>; }
@@ -478,14 +888,17 @@ function ApproverRequestDetailsModal({
   onClose,
   onApprove,
   onReject,
+  onDeleted,
 }: {
   journey: Journey;
   onClose: () => void;
   onApprove?: (journey: Journey) => void;
   onReject?: (journey: Journey) => void;
+  onDeleted?: () => void;
 }) {
   const [booking, setBooking] = useState<any | null>(null);
   const [loadingBooking, setLoadingBooking] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -695,36 +1108,61 @@ function ApproverRequestDetailsModal({
         </div>
 
         {/* Action Buttons */}
-        <div className="dialog-actions" style={{ marginTop: 24 }}>
-          <button type="button" className="button button-ghost" onClick={onClose}>
-            Close
+        <div className="dialog-actions" style={{ marginTop: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+          <button
+            type="button"
+            className="button button-danger button-small"
+            style={{ display: "inline-flex", alignItems: "center", gap: 5 }}
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={13} /> Delete request
           </button>
-          {isPending && onReject && onApprove && (
-            <>
-              <button
-                type="button"
-                className="button button-danger"
-                onClick={() => {
-                  onClose();
-                  onReject(journey);
-                }}
-              >
-                Reject Request
-              </button>
-              <button
-                type="button"
-                className="button button-primary"
-                onClick={() => {
-                  onClose();
-                  onApprove(journey);
-                }}
-              >
-                Approve Request <ArrowUpRight size={15} />
-              </button>
-            </>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+            <button type="button" className="button button-ghost" onClick={onClose}>
+              Close
+            </button>
+            {isPending && onReject && onApprove && (
+              <>
+                <button
+                  type="button"
+                  className="button button-danger"
+                  onClick={() => {
+                    onClose();
+                    onReject(journey);
+                  }}
+                >
+                  Reject Request
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => {
+                    onClose();
+                    onApprove(journey);
+                  }}
+                >
+                  Approve Request <ArrowUpRight size={15} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
+      {confirmDelete && (
+        <DeleteConfirmDialog
+          title={`Delete request #${journey.id}?`}
+          description={`Permanently remove travel request for ${emp.name || journey.passenger || "employee"} to ${journey.destination}? This will delete it from all queues.`}
+          confirmLabel="Delete request"
+          onConfirm={async () => {
+            await travelRequestsApi.delete(journey.id);
+            toast.success(`Request #${journey.id} deleted.`);
+            onClose();
+            if (onDeleted) onDeleted();
+            else window.location.reload();
+          }}
+          onClose={() => setConfirmDelete(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1133,6 +1571,7 @@ function Approvals({ history = false }: { history?: boolean }) {
   const [working, setWorking] = useState<string | null>(null);
   const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null);
   const [confirmation, setConfirmation] = useState<{ journey: Journey; action: "approve" | "reject" } | null>(null);
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
   const user = getStoredUser<AuthUser>();
 
   async function decide(journey: Journey, action: "approve" | "reject") {
@@ -1173,7 +1612,19 @@ function Approvals({ history = false }: { history?: boolean }) {
             <span className="card-kicker">{history ? "BACKEND HISTORY" : "PENDING REQUESTS"}</span>
             <h2 className="section-heading">{history ? "Recent approval activity" : "Requests ready for review"}</h2>
           </div>
-          <span className="data-note"><ShieldCheck size={13} /> Live backend data</span>
+          <div className="flex items-center gap-2">
+            {history && rows.length > 0 && (
+              <button
+                type="button"
+                className="button button-ghost button-small flex items-center gap-1.5"
+                onClick={() => setConfirmClearHistory(true)}
+                title="Clear all past approval decisions"
+              >
+                <Trash2 size={13} /> Clear decision history
+              </button>
+            )}
+            <span className="data-note"><ShieldCheck size={13} /> Live backend data</span>
+          </div>
         </div>
 
         {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
@@ -1262,6 +1713,7 @@ function Approvals({ history = false }: { history?: boolean }) {
           onClose={() => setSelectedJourney(null)}
           onApprove={(j) => setConfirmation({ journey: j, action: "approve" })}
           onReject={(j) => setConfirmation({ journey: j, action: "reject" })}
+          onDeleted={() => window.location.reload()}
         />
       )}
 
@@ -1270,6 +1722,20 @@ function Approvals({ history = false }: { history?: boolean }) {
           action={confirmation.action}
           onClose={() => setConfirmation(null)}
           onConfirm={() => decide(confirmation.journey, confirmation.action)}
+        />
+      )}
+
+      {confirmClearHistory && (
+        <DeleteConfirmDialog
+          title="Clear decision history?"
+          description="This will clear past approved and rejected requests from the queue history. Active pending items will remain untouched."
+          confirmLabel="Clear history"
+          onConfirm={async () => {
+            await travelRequestsApi.deletePastOrCompleted();
+            toast.success("Approval decision history cleared.");
+            window.location.reload();
+          }}
+          onClose={() => setConfirmClearHistory(false)}
         />
       )}
     </div>
@@ -1308,6 +1774,7 @@ function TravelDesk() {
   const [bookingJourney, setBookingJourney] = useState<Journey | null>(null);
   const [editingBooking, setEditingBooking] = useState<any | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState<any | null>(null);
+  const [deletingJourney, setDeletingJourney] = useState<Journey | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -1458,21 +1925,31 @@ function TravelDesk() {
                             )}
                           </td>
                           <td>
-                            {isApproved ? (
-                              <button className="table-action" onClick={() => setBookingJourney(row)}>
-                                Add booking <ArrowUpRight size={14} />
+                            <div className="table-inline-actions">
+                              {isApproved ? (
+                                <button className="table-action" onClick={() => setBookingJourney(row)}>
+                                  Add booking <ArrowUpRight size={14} />
+                                </button>
+                              ) : isPending ? (
+                                <button className="table-action" onClick={() => setBookingJourney(row)}>
+                                  Prepare booking <ArrowUpRight size={14} />
+                                </button>
+                              ) : record ? (
+                                <button className="table-action" onClick={() => setEditingBooking(record)}>
+                                  View / edit <ArrowUpRight size={14} />
+                                </button>
+                              ) : (
+                                <span className="table-action table-action-muted">Booked <Check size={14} /></span>
+                              )}
+                              <button
+                                type="button"
+                                className="table-action table-action-danger"
+                                title="Delete request from operations queue"
+                                onClick={() => setDeletingJourney(row)}
+                              >
+                                <Trash2 size={13} />
                               </button>
-                            ) : isPending ? (
-                              <button className="table-action" onClick={() => setBookingJourney(row)}>
-                                Prepare booking <ArrowUpRight size={14} />
-                              </button>
-                            ) : record ? (
-                              <button className="table-action" onClick={() => setEditingBooking(record)}>
-                                View / edit <ArrowUpRight size={14} />
-                              </button>
-                            ) : (
-                              <span className="table-action table-action-muted">Booked <Check size={14} /></span>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1490,6 +1967,19 @@ function TravelDesk() {
       {bookingJourney && <BookingDialog journey={bookingJourney} onClose={() => setBookingJourney(null)} onSubmit={createBooking} />}
       {editingBooking && <BookingEditDialog booking={editingBooking} onClose={() => setEditingBooking(null)} onSubmit={updateBooking} />}
       {cancellingBooking && <CancellationDialog booking={cancellingBooking} onClose={() => setCancellingBooking(null)} onSubmit={cancelBooking} />}
+      {deletingJourney && (
+        <DeleteConfirmDialog
+          title={`Delete request #${deletingJourney.id}?`}
+          description={`Remove travel request for ${deletingJourney.passenger || "employee"} to ${deletingJourney.destination} from the operations queue?`}
+          confirmLabel="Delete request"
+          onConfirm={async () => {
+            await travelRequestsApi.delete(deletingJourney.id);
+            toast.success(`Request #${deletingJourney.id} deleted.`);
+            await refresh();
+          }}
+          onClose={() => setDeletingJourney(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1849,10 +2339,221 @@ function AdminRequests() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selected, setSelected] = useState<Record<string, any> | null>(null);
-  useEffect(() => { let active = true; setLoading(true); setError(""); travelRequestsApi.list().then((data) => { if (active) setRequests(Array.isArray(data) ? data as Array<Record<string, any>> : []); }).catch((requestError) => { if (active) setError(requestError instanceof Error ? requestError.message : "Travel requests are unavailable."); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, []);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    isDanger?: boolean;
+    action: () => Promise<void>;
+  } | null>(null);
+
+  const fetchRequests = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await travelRequestsApi.list();
+      setRequests(Array.isArray(data) ? (data as Array<Record<string, any>>) : []);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Travel requests are unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRequests();
+  }, []);
+
   const statuses = useMemo(() => Array.from(new Set(requests.map((request) => String(request.status || "PENDING").toUpperCase()))), [requests]);
-  const filtered = useMemo(() => requests.filter((request) => { const employee = request.employee || {}; const haystack = [request.id, employee.name, employee.employeeId, request.tripType, request.fromLocation, request.toLocation, request.projectName, request.reason, request.status].join(" ").toLowerCase(); return (statusFilter === "ALL" || String(request.status || "PENDING").toUpperCase() === statusFilter) && haystack.includes(query.toLowerCase()); }), [requests, query, statusFilter]);
-  return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/admin/requests"]} /><div className="section-title-row section-title-spaced"><div><span className="card-kicker">ADMINISTRATION</span><h2 className="section-heading">Request activity</h2><p className="page-description">Review every travel request returned by the connected backend.</p></div><span className="data-note"><ShieldCheck size={13} /> Live backend data</span></div><div className="panel table-panel"><div className="table-toolbar"><div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employee, route or project" /></div><div className="toolbar-filters"><Filter size={15} /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">All statuses</option>{statuses.map((status) => <option value={status} key={status}>{adminRequestStatus(status)}</option>)}</select></div></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}{loading ? <EmptyState icon={<Clock3 size={20} />} title="Loading requests" description="Fetching travel request activity from Travora." /> : filtered.length ? <div className="responsive-table"><table><thead><tr><th>Employee</th><th>Trip</th><th>Route</th><th>Travel date</th><th>Project</th><th>Status</th><th>Submitted</th><th /></tr></thead><tbody>{filtered.map((request, index) => { const employee = request.employee || {}; return <tr key={request.id || index}><td><div className="table-journey"><span className="avatar avatar-tiny">{String(employee.name || employee.employeeId || "E").slice(0, 2).toUpperCase()}</span><span><strong>{employee.name || "Unnamed employee"}</strong><small>{employee.employeeId || "Employee ID unavailable"}</small></span></div></td><td>{request.tripType || "—"}</td><td>{request.fromLocation || "—"} → {request.toLocation || "—"}</td><td>{adminRequestDate(request.travelDate)}</td><td>{request.projectName || "—"}</td><td><StatusBadge status={adminRequestStatus(request.status) as any} /></td><td>{adminRequestDate(adminRequestSubmitted(request))}</td><td><button type="button" className="table-action" onClick={() => setSelected(request)}>View details <ArrowUpRight size={14} /></button></td></tr>; })}</tbody></table></div> : <EmptyState icon={<FileText size={20} />} title={requests.length ? "No matching requests" : "No travel requests"} description={requests.length ? "Try another search or status filter." : "Travel requests will appear here when returned by the backend."} />}</div>{selected && <AdminRequestDetails request={selected} onClose={() => setSelected(null)} />}</div>;
+  const filtered = useMemo(() => requests.filter((request) => {
+    const employee = request.employee || {};
+    const haystack = [request.id, employee.name, employee.employeeId, request.tripType, request.fromLocation, request.toLocation, request.projectName, request.reason, request.status].join(" ").toLowerCase();
+    return (statusFilter === "ALL" || String(request.status || "PENDING").toUpperCase() === statusFilter) && haystack.includes(query.toLowerCase());
+  }), [requests, query, statusFilter]);
+
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={pageMeta["/admin/requests"]} />
+      <div className="section-title-row section-title-spaced">
+        <div>
+          <span className="card-kicker">ADMINISTRATION</span>
+          <h2 className="section-heading">Request activity</h2>
+          <p className="page-description">Review every travel request returned by the connected backend.</p>
+        </div>
+        <span className="data-note"><ShieldCheck size={13} /> Live backend data</span>
+      </div>
+      <div className="panel table-panel">
+        <div className="table-toolbar" style={{ flexWrap: "wrap", gap: 10 }}>
+          <div className="search-field">
+            <Search size={16} />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search employee, route or project" />
+          </div>
+          <div className="toolbar-filters">
+            <Filter size={15} />
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="ALL">All statuses</option>
+              {statuses.map((status) => <option value={status} key={status}>{adminRequestStatus(status)}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2" style={{ marginLeft: "auto" }}>
+            <button
+              type="button"
+              className="button button-ghost button-small flex items-center gap-1.5"
+              title="Remove booked, completed, or cancelled requests from the queue"
+              onClick={() => setConfirmDialog({
+                title: "Clear completed & past trips?",
+                description: "This will remove all booked, completed, and cancelled requests from the queue. Pending requests will remain intact.",
+                confirmLabel: "Clear past trips",
+                action: async () => {
+                  await travelRequestsApi.deletePastOrCompleted();
+                  toast.success("Past trips cleared from queue.");
+                  await fetchRequests();
+                }
+              })}
+            >
+              <Trash2 size={13} /> Clear past trips
+            </button>
+            <button
+              type="button"
+              className="button button-danger button-small flex items-center gap-1.5"
+              title="Delete all travel requests for every user"
+              onClick={() => setConfirmDialog({
+                title: "Delete ALL travel requests?",
+                description: "This will permanently delete every travel request and linked booking across the organization for all users. The queue will be completely empty.",
+                confirmLabel: "Delete all requests",
+                action: async () => {
+                  await travelRequestsApi.deleteAll();
+                  toast.success("All travel requests have been deleted.");
+                  await fetchRequests();
+                }
+              })}
+            >
+              <Trash2 size={13} /> Delete all requests
+            </button>
+            <button
+              type="button"
+              className="button button-ghost button-small flex items-center gap-1.5"
+              title="Restore sample demo journeys and bookings"
+              onClick={() => setConfirmDialog({
+                title: "Restore demo trips & bookings?",
+                description: "This will restore standard sample travel requests and bookings for testing.",
+                confirmLabel: "Restore demo data",
+                isDanger: false,
+                action: async () => {
+                  await travelRequestsApi.resetDemo();
+                  toast.success("Demo trips and bookings restored.");
+                  await fetchRequests();
+                }
+              })}
+            >
+              <RotateCcw size={13} /> Reset demo
+            </button>
+          </div>
+        </div>
+        {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+        {loading ? (
+          <EmptyState icon={<Clock3 size={20} />} title="Loading requests" description="Fetching travel request activity from Travora." />
+        ) : filtered.length ? (
+          <div className="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Trip</th>
+                  <th>Route</th>
+                  <th>Travel date</th>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Submitted</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((request, index) => {
+                  const employee = request.employee || {};
+                  return (
+                    <tr key={request.id || index}>
+                      <td>
+                        <div className="table-journey">
+                          <span className="avatar avatar-tiny">
+                            {String(employee.name || employee.employeeId || "E").slice(0, 2).toUpperCase()}
+                          </span>
+                          <span>
+                            <strong>{employee.name || "Unnamed employee"}</strong>
+                            <small>{employee.employeeId || "Employee ID unavailable"}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>{request.tripType || "—"}</td>
+                      <td>{request.fromLocation || "—"} → {request.toLocation || "—"}</td>
+                      <td>{adminRequestDate(request.travelDate)}</td>
+                      <td>{request.projectName || "—"}</td>
+                      <td><StatusBadge status={adminRequestStatus(request.status) as any} /></td>
+                      <td>{adminRequestDate(adminRequestSubmitted(request))}</td>
+                      <td>
+                        <div className="table-inline-actions">
+                          <button type="button" className="table-action" onClick={() => setSelected(request)}>
+                            View details <ArrowUpRight size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className="table-action table-action-danger"
+                            title="Delete this request"
+                            onClick={() => setConfirmDialog({
+                              title: `Delete request #${request.id}?`,
+                              description: `Permanently remove travel request for ${employee.name || "employee"} to ${request.toLocation || "destination"}?`,
+                              confirmLabel: "Delete request",
+                              action: async () => {
+                                await travelRequestsApi.delete(String(request.id));
+                                toast.success(`Request #${request.id} deleted.`);
+                                await fetchRequests();
+                              }
+                            })}
+                          >
+                            Delete <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={<FileText size={20} />}
+            title={requests.length ? "No matching requests" : "No travel requests in queue"}
+            description={requests.length ? "Try another search or status filter." : "The travel request queue is empty. You can restore demo records using the 'Reset demo' button above or submit new requests."}
+            action={!requests.length ? (
+              <button
+                type="button"
+                className="button button-primary button-small"
+                onClick={async () => {
+                  await travelRequestsApi.resetDemo();
+                  toast.success("Demo trips restored.");
+                  await fetchRequests();
+                }}
+              >
+                <RotateCcw size={14} /> Restore demo trips
+              </button>
+            ) : undefined}
+          />
+        )}
+      </div>
+      {selected && <AdminRequestDetails request={selected} onClose={() => setSelected(null)} />}
+      {confirmDialog && (
+        <DeleteConfirmDialog
+          title={confirmDialog.title}
+          description={confirmDialog.description}
+          confirmLabel={confirmDialog.confirmLabel}
+          isDanger={confirmDialog.isDanger}
+          onConfirm={confirmDialog.action}
+          onClose={() => setConfirmDialog(null)}
+        />
+      )}
+    </div>
+  );
 }
 
 function adminBookingStatus(booking: Record<string, any>) { if (booking.cancelled === true) return "Cancelled"; return adminRequestStatus(booking.status || booking.travelRequest?.status || "BOOKED"); }
@@ -1892,11 +2593,205 @@ function ReportBars({ title, eyebrow, rows, max, empty }: { title: string; eyebr
 
 
 function AdminSettings({ user }: { user: AuthUser }) {
-  const [health, setHealth] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [checking, setChecking] = useState(false); const [error, setError] = useState("");
-  async function checkConnection() { setChecking(true); setError(""); try { const response = await healthApi.check(); setHealth(typeof response === "string" ? response : "Backend is responding"); } catch (healthError) { setHealth(null); setError(healthError instanceof Error ? healthError.message : "The backend status could not be checked."); } finally { setChecking(false); setLoading(false); } }
-  useEffect(() => { checkConnection(); }, []);
+  const [health, setHealth] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    description: string;
+    confirmLabel?: string;
+    isDanger?: boolean;
+    action: () => Promise<void>;
+  } | null>(null);
+
+  async function checkConnection() {
+    setChecking(true);
+    setError("");
+    try {
+      const response = await healthApi.check();
+      setHealth(typeof response === "string" ? response : "Backend is responding");
+    } catch (healthError) {
+      setHealth(null);
+      setError(healthError instanceof Error ? healthError.message : "The backend status could not be checked.");
+    } finally {
+      setChecking(false);
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    checkConnection();
+  }, []);
+
   const accountRows = [["Username", user.username], ["Role", roleLabels[user.role]], ["User ID", user.id], ["Employee ID", user.employeeId || null]].filter(([, value]) => value !== null && value !== undefined && value !== "");
-  return <div className="page-stack animate-page"><PageTitle meta={{ ...pageMeta["/admin/settings"], title: "Settings" }} /><div className="section-title-row section-title-spaced"><div><span className="card-kicker">ADMINISTRATION</span><h2 className="section-heading">Workspace settings</h2><p className="page-description">Account and system information available to your authenticated administrator session.</p></div><span className="data-note"><ShieldCheck size={13} /> Admin access</span></div><section className="settings-grid"><div className="panel settings-card"><div className="settings-card-header"><div className="settings-icon"><UserRound size={18} /></div><div><span className="card-kicker">ACCOUNT</span><h2 className="section-heading">Authenticated account</h2><p>These values come directly from the current JWT-backed session.</p></div></div><div className="settings-list">{accountRows.map(([label, value]) => <div className="settings-row" key={String(label)}><span>{String(label)}</span><strong>{String(value)}</strong></div>)}</div><div className="settings-note"><ShieldCheck size={15} /><span>Role-based access is enforced by the existing authenticated application session.</span></div></div><div className="panel settings-card"><div className="settings-card-header"><div className="settings-icon settings-icon-green"><ShieldCheck size={18} /></div><div><span className="card-kicker">SYSTEM STATUS</span><h2 className="section-heading">Backend connection</h2><p>Live status from the existing backend health endpoint.</p></div></div><div className={`settings-health ${health ? "is-online" : error ? "is-offline" : "is-checking"}`}><span className="health-pulse" /><div><strong>{loading ? "Checking connection…" : health ? "Backend online" : "Unable to reach backend"}</strong><small>{loading ? "Contacting /api/health" : health || "Try checking the connection again."}</small></div></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}<button type="button" className="button button-ghost settings-refresh" onClick={checkConnection} disabled={checking}>{checking ? "Checking…" : "Check connection"}<ArrowUpRight size={15} /></button></div><div className="panel settings-card settings-readonly-card"><div className="settings-card-header"><div className="settings-icon settings-icon-saffron"><Settings2 size={18} /></div><div><span className="card-kicker">AVAILABLE CONTROLS</span><h2 className="section-heading">Configuration boundaries</h2><p>Travora keeps unsupported changes out of the UI.</p></div></div><div className="settings-boundary-list"><div><Check size={15} /><span>Account and access information is visible from the active session.</span></div><div><Check size={15} /><span>Backend availability can be checked through the existing health endpoint.</span></div><div><XCircle size={15} /><span>No persistent Admin settings endpoint is currently exposed.</span></div><div><XCircle size={15} /><span>Password changes and theme controls are not part of this page.</span></div></div></div></section></div>;
+
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={{ ...pageMeta["/admin/settings"], title: "Settings" }} />
+      <div className="section-title-row section-title-spaced">
+        <div>
+          <span className="card-kicker">ADMINISTRATION</span>
+          <h2 className="section-heading">Workspace settings</h2>
+          <p className="page-description">Account, queue, and system management available to your authenticated administrator session.</p>
+        </div>
+        <span className="data-note"><ShieldCheck size={13} /> Admin access</span>
+      </div>
+      <section className="settings-grid">
+        <div className="panel settings-card">
+          <div className="settings-card-header">
+            <div className="settings-icon"><UserRound size={18} /></div>
+            <div>
+              <span className="card-kicker">ACCOUNT</span>
+              <h2 className="section-heading">Authenticated account</h2>
+              <p>These values come directly from the current JWT-backed session.</p>
+            </div>
+          </div>
+          <div className="settings-list">
+            {accountRows.map(([label, value]) => (
+              <div className="settings-row" key={String(label)}>
+                <span>{String(label)}</span>
+                <strong>{String(value)}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="settings-note">
+            <ShieldCheck size={15} />
+            <span>Role-based access is enforced by the existing authenticated application session.</span>
+          </div>
+        </div>
+
+        <div className="panel settings-card">
+          <div className="settings-card-header">
+            <div className="settings-icon settings-icon-green"><ShieldCheck size={18} /></div>
+            <div>
+              <span className="card-kicker">SYSTEM STATUS</span>
+              <h2 className="section-heading">Backend connection</h2>
+              <p>Live status from the existing backend health endpoint.</p>
+            </div>
+          </div>
+          <div className={`settings-health ${health ? "is-online" : error ? "is-offline" : "is-checking"}`}>
+            <span className="health-pulse" />
+            <div>
+              <strong>{loading ? "Checking connection…" : health ? "Backend online" : "Unable to reach backend"}</strong>
+              <small>{loading ? "Contacting /api/health" : health || "Try checking the connection again."}</small>
+            </div>
+          </div>
+          {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+          <button type="button" className="button button-ghost settings-refresh" onClick={checkConnection} disabled={checking}>
+            {checking ? "Checking…" : "Check connection"}<ArrowUpRight size={15} />
+          </button>
+        </div>
+
+        <div className="panel settings-card">
+          <div className="settings-card-header">
+            <div className="settings-icon settings-icon-red"><Trash2 size={18} /></div>
+            <div>
+              <span className="card-kicker">DATA & QUEUES</span>
+              <h2 className="section-heading">Queue management</h2>
+              <p>Clear organization travel queues, purge past trips, or wipe all records.</p>
+            </div>
+          </div>
+          <div className="settings-list">
+            <div className="settings-row">
+              <div>
+                <strong>Purge completed & past trips</strong>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--ink-muted)" }}>Removes booked, completed, and cancelled trips from queues while keeping pending items.</p>
+              </div>
+              <button
+                type="button"
+                className="button button-ghost button-small flex items-center gap-1.5"
+                onClick={() => setConfirmDialog({
+                  title: "Clear completed & past trips?",
+                  description: "This will remove all completed and cancelled trips across all queues. Active pending requests will remain intact.",
+                  confirmLabel: "Clear past trips",
+                  action: async () => {
+                    await travelRequestsApi.deletePastOrCompleted();
+                    toast.success("Completed and past trips cleared.");
+                  }
+                })}
+              >
+                <Trash2 size={13} /> Purge past trips
+              </button>
+            </div>
+
+            <div className="settings-row">
+              <div>
+                <strong>Delete ALL requests & bookings</strong>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--ink-muted)" }}>Permanently wipes every travel request and booking in Travora for every user.</p>
+              </div>
+              <button
+                type="button"
+                className="button button-danger button-small flex items-center gap-1.5"
+                onClick={() => setConfirmDialog({
+                  title: "Delete ALL travel requests & bookings?",
+                  description: "This will permanently delete every travel request and booking in the system for all users. All queues will be completely empty.",
+                  confirmLabel: "Delete all data",
+                  action: async () => {
+                    await travelRequestsApi.deleteAll();
+                    toast.success("All travel requests and bookings have been deleted.");
+                  }
+                })}
+              >
+                <Trash2 size={13} /> Delete all data
+              </button>
+            </div>
+
+            <div className="settings-row">
+              <div>
+                <strong>Restore default demo data</strong>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--ink-muted)" }}>Re-populates standard sample requests and bookings for testing.</p>
+              </div>
+              <button
+                type="button"
+                className="button button-ghost button-small flex items-center gap-1.5"
+                onClick={() => setConfirmDialog({
+                  title: "Restore demo trips & bookings?",
+                  description: "This will re-populate default sample journeys and bookings.",
+                  confirmLabel: "Restore demo",
+                  isDanger: false,
+                  action: async () => {
+                    await travelRequestsApi.resetDemo();
+                    toast.success("Demo trips and bookings restored.");
+                  }
+                })}
+              >
+                <RotateCcw size={13} /> Restore demo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="panel settings-card settings-readonly-card">
+          <div className="settings-card-header">
+            <div className="settings-icon settings-icon-saffron"><Settings2 size={18} /></div>
+            <div>
+              <span className="card-kicker">AVAILABLE CONTROLS</span>
+              <h2 className="section-heading">Configuration boundaries</h2>
+              <p>Travora keeps unsupported changes out of the UI.</p>
+            </div>
+          </div>
+          <div className="settings-boundary-list">
+            <div><Check size={15} /><span>Account and access information is visible from the active session.</span></div>
+            <div><Check size={15} /><span>Backend availability can be checked through the existing health endpoint.</span></div>
+            <div><Check size={15} /><span>Queue cleanup and total data wipe are available in Data & Queues above.</span></div>
+            <div><XCircle size={15} /><span>Password changes and theme controls are handled elsewhere.</span></div>
+          </div>
+        </div>
+      </section>
+
+      {confirmDialog && (
+        <DeleteConfirmDialog
+          title={confirmDialog.title}
+          description={confirmDialog.description}
+          confirmLabel={confirmDialog.confirmLabel}
+          isDanger={confirmDialog.isDanger}
+          onConfirm={confirmDialog.action}
+          onClose={() => setConfirmDialog(null)}
+        />
+      )}
+    </div>
+  );
 }
 
 function Admin({ section = "overview", user }: { section?: string; user?: AuthUser }) { if (section === "requests") return <AdminRequests />; if (section === "bookings") return <AdminBookings />; if (section === "reports") return <AdminReports />; if (section === "settings" && user) return <AdminSettings user={user} />; return <AdminOverview section={section} />; }

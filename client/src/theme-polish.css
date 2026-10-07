@@ -101,6 +101,8 @@
 .dark .report-bar-track span { background: linear-gradient(90deg, var(--green), var(--saffron)); }
 .dark .settings-icon { background: #29433f; }
 .dark .settings-icon-saffron { background: #4b3d22; }
+.settings-icon-red { color: var(--red); background: #fdf0ee; }
+.dark .settings-icon-red { background: #4a2828; color: #ff8b80; }
 .dark .empty-state, .dark .notification-state, .dark .booking-empty, .dark .booking-loading { color: var(--ink-muted); }
 .dark [data-sonner-toast] { color: var(--ink); border-color: var(--line); background: var(--surface); box-shadow: var(--shadow); }
 .dark [data-sonner-toast] [data-title] { color: var(--ink); }

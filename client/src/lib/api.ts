@@ -244,9 +244,9 @@ const LOCAL_BOOKINGS_KEY = "travora_local_bookings";
 export function getLocalRequests(): any[] {
   try {
     const raw = window.localStorage.getItem(LOCAL_REQUESTS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn("Failed to load local requests", e);
@@ -265,9 +265,9 @@ export function saveLocalRequests(requests: any[]) {
 export function getLocalBookings(): any[] {
   try {
     const raw = window.localStorage.getItem(LOCAL_BOOKINGS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (e) {
     console.warn("Failed to load local bookings", e);
@@ -287,7 +287,7 @@ export const travelRequestsApi = {
   list: async () => {
     try {
       const data = await apiRequest<any[]>("/api/travel-requests");
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) return data;
       return getLocalRequests();
     } catch {
       return getLocalRequests();
@@ -360,13 +360,52 @@ export const travelRequestsApi = {
     }
     return { id, status: "REJECTED", approverName, comment };
   },
+  delete: async (id: string) => {
+    const currentReqs = getLocalRequests();
+    saveLocalRequests(currentReqs.filter((r) => String(r.id) !== String(id)));
+    const currentBookings = getLocalBookings();
+    saveLocalBookings(currentBookings.filter((b) => String(b.travelRequest?.id) !== String(id)));
+    try {
+      await apiRequest(`/api/travel-requests/${id}`, { method: "DELETE" });
+    } catch {
+      // Backend offline fallback
+    }
+    return { success: true, id };
+  },
+  deleteAll: async () => {
+    saveLocalRequests([]);
+    saveLocalBookings([]);
+    try {
+      await apiRequest("/api/travel-requests/all", { method: "DELETE" });
+    } catch {
+      // Backend offline fallback
+    }
+    return { success: true };
+  },
+  deletePastOrCompleted: async () => {
+    const currentReqs = getLocalRequests();
+    const activeReqs = currentReqs.filter((r) => {
+      const status = String(r.status || "").toUpperCase();
+      return status === "PENDING" || status === "APPROVED";
+    });
+    const keptIds = new Set(activeReqs.map((r) => String(r.id)));
+    saveLocalRequests(activeReqs);
+    const currentBookings = getLocalBookings();
+    saveLocalBookings(currentBookings.filter((b) => keptIds.has(String(b.travelRequest?.id))));
+    return { success: true, count: currentReqs.length - activeReqs.length };
+  },
+  resetDemo: async () => {
+    saveLocalRequests(DEMO_REQUESTS);
+    saveLocalBookings(DEMO_BOOKINGS);
+    return { success: true };
+  },
 };
 
 export const bookingsApi = {
   list: async () => {
     try {
       const data = await apiRequest<any[]>("/api/bookings");
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) return data;
       return getLocalBookings();
     } catch {
       return getLocalBookings();
@@ -400,7 +439,6 @@ export const bookingsApi = {
       String(r.id) === String(reqId) ? { ...r, status: "BOOKED" } : r
     );
     saveLocalRequests(updatedReqs);
-
     try {
       await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload) });
     } catch {
@@ -431,6 +469,20 @@ export const bookingsApi = {
       // Backend offline fallback
     }
     return { id, cancelled: true, cancellationReason: reason, cancellationCharge };
+  },
+  delete: async (id: string) => {
+    const current = getLocalBookings();
+    saveLocalBookings(current.filter((b) => String(b.id) !== String(id)));
+    try {
+      await apiRequest(`/api/bookings/${id}`, { method: "DELETE" });
+    } catch {
+      // Backend offline fallback
+    }
+    return { success: true, id };
+  },
+  deleteAll: async () => {
+    saveLocalBookings([]);
+    return { success: true };
   },
 };
 
