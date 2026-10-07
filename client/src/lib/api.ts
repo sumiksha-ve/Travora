@@ -143,10 +143,39 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 }
 
 export async function login(credentials: { username: string; password: string }): Promise<AuthUser> {
-  const clean = (credentials.username || "").trim().toLowerCase();
+  const cleanUser = (credentials.username || "").trim().toLowerCase();
+  const cleanPass = (credentials.password || "").trim();
 
-  // Instant role mapping for Travora accounts (avoids mixed-content or unreachable localhost:8080 timeouts)
-  if (clean === "approver" || clean.includes("approv") || clean.includes("manager") || clean.includes("rajesh")) {
+  if (!cleanUser) {
+    throw new Error("Please enter your Login ID / Username.");
+  }
+  if (!cleanPass) {
+    throw new Error("Please enter your password.");
+  }
+
+  // Strict credential verification for Travora accounts
+  const isEmployee = cleanUser === "employee" || cleanUser === "arjun";
+  const isApprover = cleanUser === "approver" || cleanUser === "rajesh";
+  const isTravelDesk = cleanUser === "traveldesk" || cleanUser === "travel_desk" || cleanUser === "travel-desk";
+  const isAdmin = cleanUser === "admin";
+
+  if (isEmployee) {
+    if (cleanPass !== "password") {
+      throw new Error("Invalid username or password.");
+    }
+    return {
+      id: 1,
+      username: "Arjun Mehta",
+      role: "EMPLOYEE",
+      employeeId: "EMP-2026",
+      token: "jwt-employee-auth-token",
+    };
+  }
+
+  if (isApprover) {
+    if (cleanPass !== "password") {
+      throw new Error("Invalid username or password.");
+    }
     return {
       id: 2,
       username: "Rajesh Menon",
@@ -155,16 +184,11 @@ export async function login(credentials: { username: string; password: string })
       token: "jwt-approver-auth-token",
     };
   }
-  if (clean === "admin" || clean.includes("admin")) {
-    return {
-      id: 3,
-      username: "System Admin",
-      role: "ADMIN",
-      employeeId: "ADM-0001",
-      token: "jwt-admin-auth-token",
-    };
-  }
-  if (clean === "traveldesk" || clean === "travel_desk" || clean === "travel-desk" || clean.includes("desk")) {
+
+  if (isTravelDesk) {
+    if (cleanPass !== "password") {
+      throw new Error("Invalid username or password.");
+    }
     return {
       id: 4,
       username: "Travel Desk",
@@ -173,13 +197,17 @@ export async function login(credentials: { username: string; password: string })
       token: "jwt-traveldesk-auth-token",
     };
   }
-  if (clean === "employee" || clean.includes("emp") || clean.includes("arjun") || clean === "user") {
+
+  if (isAdmin) {
+    if (cleanPass !== "password" && cleanPass !== "admin" && cleanPass !== "admin123") {
+      throw new Error("Invalid username or password.");
+    }
     return {
-      id: 1,
-      username: "Arjun Mehta",
-      role: "EMPLOYEE",
-      employeeId: "EMP-2026",
-      token: "jwt-employee-auth-token",
+      id: 3,
+      username: "System Admin",
+      role: "ADMIN",
+      employeeId: "ADM-0001",
+      token: "jwt-admin-auth-token",
     };
   }
 
@@ -200,14 +228,8 @@ export async function login(credentials: { username: string; password: string })
     }
   }
 
-  // Seamless fallback for any other typed username
-  return {
-    id: Math.floor(Math.random() * 8000 + 1000),
-    username: credentials.username || "Team Member",
-    role: "EMPLOYEE",
-    employeeId: "EMP-2026",
-    token: "jwt-employee-auth-token",
-  };
+  // Reject invalid credentials
+  throw new Error("Invalid username or password.");
 }
 
 export function persistAuth(user: AuthUser) {

@@ -2058,10 +2058,14 @@ function ProfilePage({ user }: { user: AuthUser }) {
 function AppRouter() {
   const [location, setLocation] = useLocation();
   const [user, setUser] = useState<AuthUser | null>(() => {
+    // If navigating directly to /login, clear stale credentials so user can log in explicitly
+    if (typeof window !== "undefined" && window.location.pathname === "/login") {
+      clearAuth();
+      return null;
+    }
     const stored = getStoredUser<AuthUser>();
     return getToken() && isValidAuthUser(stored) ? stored : null;
   });
-  const path = location === "/" ? "/employee" : location;
   const role = user?.role;
   const roleRoots: Record<Role, string> = {
     EMPLOYEE: "/employee",
@@ -2069,6 +2073,7 @@ function AppRouter() {
     TRAVEL_DESK: "/travel-desk",
     ADMIN: "/admin",
   };
+  const path = location === "/" ? (user ? roleRoots[user.role] : "/login") : location;
   const allowedPaths: Record<Role, string[]> = {
     EMPLOYEE: [
       "/employee",
@@ -2111,6 +2116,7 @@ function AppRouter() {
 
   useEffect(() => {
     const handleAuthExpired = () => {
+      clearAuth();
       setUser(null);
       setLocation("/login");
     };
@@ -2119,9 +2125,11 @@ function AppRouter() {
   }, [setLocation]);
 
   useEffect(() => {
-    if (!user && location !== "/login") setLocation("/login");
-    else if (user && location === "/login") setLocation(roleRoots[user.role]);
-    else if (user && !allowed) setLocation(roleRoots[user.role]);
+    if (!user && location !== "/login") {
+      setLocation("/login");
+    } else if (user && location !== "/login" && !allowed) {
+      setLocation(roleRoots[user.role]);
+    }
   }, [user, location, allowed, setLocation]);
 
   if (location === "/login") {
