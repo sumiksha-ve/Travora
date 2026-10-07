@@ -343,6 +343,202 @@
   background: rgba(131, 144, 153, 0.6);
 }
 
+/* Modal and Employee Profile Styling */
+.request-details-modal {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 40px));
+  overflow-y: auto;
+  padding: 32px;
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 24px 75px rgba(20, 35, 41, 0.22);
+  animation: modal-in 0.25s var(--ease) both;
+}
+
+.employee-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(74, 115, 105, 0.08), rgba(217, 145, 51, 0.08));
+  border: 1px solid rgba(74, 115, 105, 0.2);
+  margin: 18px 0;
+}
+.dark .employee-profile-card {
+  background: linear-gradient(135deg, rgba(113, 177, 148, 0.12), rgba(237, 182, 87, 0.1));
+  border-color: rgba(113, 177, 148, 0.25);
+}
+
+.employee-avatar-large {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--navy);
+  color: #fff;
+  font-family: "DM Serif Display", Georgia, serif;
+  font-size: 20px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+.dark .employee-avatar-large {
+  background: var(--green);
+  color: var(--navy);
+}
+
+.employee-profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.employee-profile-info h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+
+.employee-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--ink-soft);
+}
+.dark .meta-chip {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+.meta-chip-primary {
+  background: rgba(74, 115, 105, 0.15);
+  color: #2b5449;
+}
+.dark .meta-chip-primary {
+  background: rgba(113, 177, 148, 0.2);
+  color: var(--green);
+}
+
+.reason-box {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  margin: 16px 0;
+}
+.dark .reason-box {
+  background: #1b2c2e;
+}
+.reason-box-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.reason-box-content {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 0;
+}
+
+.modal-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+@media (max-width: 600px) {
+  .modal-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.desk-booking-callout {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(217, 145, 51, 0.07);
+  border: 1px solid rgba(217, 145, 51, 0.25);
+  margin-top: 18px;
+}
+.dark .desk-booking-callout {
+  background: rgba(237, 182, 87, 0.1);
+  border-color: rgba(237, 182, 87, 0.3);
+}
+
+.desk-booking-callout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.desk-booking-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+@media (max-width: 600px) {
+  .desk-booking-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.desk-booking-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.desk-booking-item span {
+  font-size: 10px;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.desk-booking-item strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* Approvals enhanced card */
+.approval-item-rich {
+  display: grid;
+  grid-template-columns: 1.3fr 1.1fr 0.9fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 900px) {
+  .approval-item-rich {
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .theme-toggle, .welcome-card, .panel, .stat-card { transition: none; animation: none; }
 }
+

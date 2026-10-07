@@ -69,6 +69,14 @@ type Journey = {
   approverName?: string;
   approvalComment?: string;
   approvalDate?: string;
+  reason?: string;
+  employee?: {
+    id?: number | string;
+    name?: string;
+    employeeId?: string;
+    department?: string;
+    designation?: string;
+  };
   rawRequest?: BackendRequest;
 };
 
@@ -93,6 +101,10 @@ function mapRequestStatus(status: string | undefined): Journey["status"] {
 function toJourney(request: BackendRequest): Journey {
   const employee = request.employee || {};
   const dates = request.returnDate ? `${formatRequestDate(request.travelDate)} – ${formatRequestDate(request.returnDate)}` : formatRequestDate(request.travelDate);
+  const empName = employee.name || employee.username || request.passenger || "Arjun Mehta";
+  const empId = employee.employeeId || "EMP-2026";
+  const dept = employee.department || "Engineering";
+  const desig = employee.designation || "Lead Architect";
   return {
     id: String(request.id),
     destination: request.toLocation || "Destination not provided",
@@ -102,10 +114,18 @@ function toJourney(request: BackendRequest): Journey {
     tripType: request.tripType || "Business",
     project: request.projectName || "—",
     status: mapRequestStatus(request.status),
-    passenger: employee.name || employee.employeeId || undefined,
+    passenger: empName,
     approverName: request.approverName,
     approvalComment: request.approvalComment,
     approvalDate: request.approvalDate,
+    reason: request.reason || "Business travel",
+    employee: {
+      id: employee.id || 1,
+      name: empName,
+      employeeId: empId,
+      department: dept,
+      designation: desig,
+    },
     rawRequest: request,
   };
 }
@@ -129,6 +149,7 @@ const pageMeta: Record<string, { eyebrow: string; title: string; description?: s
   "/employee/reports": { eyebrow: "Employee workspace", title: "Reports", description: "A clear view of your travel activity and patterns." },
   "/employee/support": { eyebrow: "Employee workspace", title: "Support", description: "Answers and help for every stage of your trip." },
   "/approver": { eyebrow: "Approver workspace", title: "Approval queue", description: "Review requests with enough context to make a confident decision." },
+  "/approver/bookings": { eyebrow: "Approver workspace", title: "Desk bookings", description: "Review confirmed ticketing, costs, and attachments completed by the Travel Desk." },
   "/approver/history": { eyebrow: "Approver workspace", title: "Approval history", description: "A record of decisions made across your team." },
   "/travel-desk": { eyebrow: "Travel desk", title: "Operations overview", description: "Keep approved trips moving toward a confirmed booking." },
   "/travel-desk/bookings": { eyebrow: "Travel desk", title: "Booking queue", description: "Manage ticketing details and booking status." },
@@ -153,6 +174,7 @@ const navByRole: Record<Role, { label: string; href: string; icon: ReactNode }[]
   ],
   APPROVER: [
     { label: "Approval queue", href: "/approver", icon: <LayoutDashboard size={17} /> },
+    { label: "Desk bookings", href: "/approver/bookings", icon: <TicketCheck size={17} /> },
     { label: "Approval history", href: "/approver/history", icon: <FileCheck2 size={17} /> },
     { label: "Reports", href: "/employee/reports", icon: <BarChart3 size={17} /> },
     { label: "Support", href: "/employee/support", icon: <CircleHelp size={17} /> },
@@ -451,16 +473,829 @@ function JourneyDrawer({ journey, onClose }: { journey: Journey; onClose: () => 
 function Detail({ label, value, icon }: { label: string; value: string; icon: ReactNode }) { return <div className="detail-row"><span className="detail-icon">{icon}</span><span><small>{label}</small><strong>{value}</strong></span></div>; }
 function TimelineItem({ label, done, last }: { label: string; done?: boolean; last?: boolean }) { return <div className={`timeline-item ${done ? "done" : ""} ${last ? "last" : ""}`}><span className="timeline-dot">{done && <Check size={11} />}</span><span>{label}</span></div>; }
 
+function ApproverRequestDetailsModal({
+  journey,
+  onClose,
+  onApprove,
+  onReject,
+}: {
+  journey: Journey;
+  onClose: () => void;
+  onApprove?: (journey: Journey) => void;
+  onReject?: (journey: Journey) => void;
+}) {
+  const [booking, setBooking] = useState<any | null>(null);
+  const [loadingBooking, setLoadingBooking] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingBooking(true);
+    bookingsApi.byTravelRequest(journey.id).then((data) => {
+      if (active) setBooking(Array.isArray(data) ? data.find((b: any) => !b?.cancelled) || data[0] || null : data || null);
+    }).catch(() => {
+      if (active) setBooking(null);
+    }).finally(() => {
+      if (active) setLoadingBooking(false);
+    });
+    return () => { active = false; };
+  }, [journey.id]);
+
+  const emp = journey.employee || {
+    name: journey.passenger || "Employee",
+    employeeId: "EMP-2026",
+    department: "Engineering",
+    designation: "Lead Architect",
+  };
+  const isPending = journey.status === "Pending approval";
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="approver-modal-title">
+      <div className="request-details-modal">
+        <button className="icon-button dialog-close" onClick={onClose} aria-label="Close details">
+          <X size={18} />
+        </button>
+
+        <div className="flex items-center justify-between gap-3 pr-8">
+          <div>
+            <span className="card-kicker">TRAVEL REQUEST DETAILS</span>
+            <h2 id="approver-modal-title" style={{ fontFamily: '"DM Serif Display", Georgia, serif', fontSize: 26, margin: "4px 0 0" }}>
+              {journey.destination}
+            </h2>
+            <small style={{ color: "var(--ink-muted)", fontSize: 11 }}>Request ID: {journey.id} · Submitted by Employee</small>
+          </div>
+          <StatusBadge status={journey.status} />
+        </div>
+
+        {/* Whos details are these: Employee Profile Card */}
+        <div className="employee-profile-card">
+          <div className="employee-avatar-large">
+            {(emp.name || journey.passenger || "E").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="employee-profile-info">
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+              Requesting Employee
+            </span>
+            <h3>{emp.name || journey.passenger}</h3>
+            <div className="employee-meta-chips">
+              <span className="meta-chip meta-chip-primary">
+                <UserRound size={12} /> ID: {emp.employeeId || "EMP-2026"}
+              </span>
+              <span className="meta-chip">
+                Department: {emp.department || "Engineering"}
+              </span>
+              <span className="meta-chip">
+                Designation: {emp.designation || "Lead Architect"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Trip details submitted by the employee */}
+        <div className="drawer-route" style={{ margin: "14px 0" }}>
+          <div>
+            <span>Origin (From)</span>
+            <strong>{journey.from}</strong>
+          </div>
+          <Plane size={18} />
+          <div>
+            <span>Destination (To)</span>
+            <strong>{journey.to}</strong>
+          </div>
+        </div>
+
+        <div className="modal-details-grid">
+          <Detail label="Travel dates" value={journey.dates} icon={<CalendarDays size={16} />} />
+          <Detail label="Trip type" value={journey.tripType} icon={<BriefcaseBusiness size={16} />} />
+          <Detail label="Project name" value={journey.project} icon={<FileText size={16} />} />
+          <Detail label="Approver status" value={journey.status} icon={<ShieldCheck size={16} />} />
+        </div>
+
+        {/* Business reason submitted by employee */}
+        <div className="reason-box">
+          <div className="reason-box-header">
+            <FileText size={14} />
+            <span>Business Reason & Justification for Travel</span>
+          </div>
+          <p className="reason-box-content">
+            {journey.reason || "Travel required for official business purpose."}
+          </p>
+        </div>
+
+        {/* Travel Desk confirmed bookings & ticket vouchers */}
+        <div className="desk-booking-callout">
+          <div className="desk-booking-callout-header">
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <TicketCheck size={18} style={{ color: "var(--saffron)" }} />
+              <strong style={{ fontSize: 13 }}>Travel Desk Bookings & Ticketing</strong>
+            </div>
+            {booking ? (
+              <span className="approval-pill booked">
+                <Check size={11} /> {booking.cancelled ? "Cancelled" : "Ticket Issued"}
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, color: "var(--ink-muted)" }}>
+                {isPending ? "Awaiting manager approval" : "No desk booking yet"}
+              </span>
+            )}
+          </div>
+
+          {loadingBooking ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: 12, fontSize: 12, color: "var(--ink-muted)" }}>
+              <Clock3 size={15} /> Checking Travel Desk booking records…
+            </div>
+          ) : booking ? (
+            <div>
+              <div className="desk-booking-grid">
+                <div className="desk-booking-item">
+                  <span>PNR / Reference</span>
+                  <strong>{booking.bookingReference || "—"}</strong>
+                </div>
+                <div className="desk-booking-item">
+                  <span>Booking Type</span>
+                  <strong>{booking.bookingType || "Flight"}</strong>
+                </div>
+                <div className="desk-booking-item">
+                  <span>Provider / Airline</span>
+                  <strong>{booking.provider || "—"}</strong>
+                </div>
+                <div className="desk-booking-item">
+                  <span>Total Cost</span>
+                  <strong>{booking.cost ? `₹${Number(booking.cost).toLocaleString("en-IN")}` : "—"}</strong>
+                </div>
+                <div className="desk-booking-item">
+                  <span>Cost Savings</span>
+                  <strong>{booking.savings ? `₹${Number(booking.savings).toLocaleString("en-IN")}` : "₹0"}</strong>
+                </div>
+                <div className="desk-booking-item">
+                  <span>Booked Date</span>
+                  <strong>{formatRequestDate(booking.bookedAt)}</strong>
+                </div>
+              </div>
+
+              {booking.notes && (
+                <div style={{ marginTop: 8, padding: 10, borderRadius: 8, background: "rgba(0,0,0,0.03)", fontSize: 12 }}>
+                  <small style={{ fontWeight: 700, color: "var(--ink-muted)" }}>Travel Desk Instructions / Notes:</small>
+                  <p style={{ margin: "2px 0 0" }}>{booking.notes}</p>
+                </div>
+              )}
+
+              {/* Attached Ticket (Photo or PDF) */}
+              {booking.attachmentData ? (
+                <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: "var(--surface)", border: "1px solid var(--line)" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    Attached Ticket Copy from Travel Desk
+                  </span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                      {booking.attachmentType?.includes("pdf") ? (
+                        <FileText size={22} className="text-red-500 shrink-0" />
+                      ) : (
+                        <ImageIcon size={22} className="text-emerald-500 shrink-0" />
+                      )}
+                      <div style={{ minWidth: 0 }}>
+                        <strong style={{ display: "block", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {booking.attachmentName || (booking.attachmentType?.includes("pdf") ? "ticket_voucher.pdf" : "ticket_copy.png")}
+                        </strong>
+                        <small style={{ fontSize: 11, color: "var(--ink-muted)" }}>
+                          {booking.attachmentType?.includes("pdf") ? "PDF Ticket Voucher" : "Ticket Photo Copy"}
+                        </small>
+                      </div>
+                    </div>
+                    <a
+                      href={booking.attachmentData}
+                      download={booking.attachmentName || "ticket"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="button button-small button-primary"
+                      style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5 }}
+                    >
+                      <Download size={13} /> View / Download
+                    </a>
+                  </div>
+
+                  {booking.attachmentType?.includes("image") && (
+                    <div style={{ marginTop: 10 }}>
+                      <img src={booking.attachmentData} alt="Ticket preview" className="ticket-attachment-preview" style={{ maxHeight: 220 }} />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginTop: 8, fontSize: 11, color: "var(--ink-muted)" }}>
+                  No ticket photo or PDF attachment uploaded yet for this booking.
+                </div>
+              )}
+            </div>
+          ) : (
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: "var(--ink-soft)" }}>
+              {isPending
+                ? "This travel request has been received by Travel Desk for advance visibility, awaiting your approval before ticketing."
+                : "No confirmed ticket has been issued yet by the Travel Desk for this request."}
+            </p>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="dialog-actions" style={{ marginTop: 24 }}>
+          <button type="button" className="button button-ghost" onClick={onClose}>
+            Close
+          </button>
+          {isPending && onReject && onApprove && (
+            <>
+              <button
+                type="button"
+                className="button button-danger"
+                onClick={() => {
+                  onClose();
+                  onReject(journey);
+                }}
+              >
+                Reject Request
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => {
+                  onClose();
+                  onApprove(journey);
+                }}
+              >
+                Approve Request <ArrowUpRight size={15} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApproverBookingDetailModal({
+  item,
+  onClose,
+}: {
+  item: { booking: any; req?: Journey };
+  onClose: () => void;
+}) {
+  const { booking, req } = item;
+  const emp = req?.employee || {
+    name: req?.passenger || "Employee",
+    employeeId: "EMP-2026",
+    department: "Engineering",
+    designation: "Lead Architect",
+  };
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true">
+      <div className="request-details-modal">
+        <button className="icon-button dialog-close" onClick={onClose} aria-label="Close booking details">
+          <X size={18} />
+        </button>
+
+        <div className="flex items-center justify-between gap-3 pr-8">
+          <div>
+            <span className="card-kicker">TRAVEL DESK CONFIRMED BOOKING</span>
+            <h2 style={{ fontFamily: '"DM Serif Display", Georgia, serif', fontSize: 26, margin: "4px 0 0" }}>
+              PNR: {booking.bookingReference || "—"}
+            </h2>
+            <small style={{ color: "var(--ink-muted)", fontSize: 11 }}>
+              {booking.bookingType || "Flight"} · Issued by Travel Desk
+            </small>
+          </div>
+          <StatusBadge status={booking.cancelled ? "Cancelled" : "Booked"} />
+        </div>
+
+        {/* Employee Profile Card */}
+        <div className="employee-profile-card">
+          <div className="employee-avatar-large">
+            {(emp.name || "E").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="employee-profile-info">
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+              Ticketed For Employee
+            </span>
+            <h3>{emp.name}</h3>
+            <div className="employee-meta-chips">
+              <span className="meta-chip meta-chip-primary">
+                <UserRound size={12} /> ID: {emp.employeeId}
+              </span>
+              <span className="meta-chip">Department: {emp.department}</span>
+              <span className="meta-chip">Designation: {emp.designation}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Route & Booking Details */}
+        {req && (
+          <div className="drawer-route" style={{ margin: "14px 0" }}>
+            <div>
+              <span>From</span>
+              <strong>{req.from}</strong>
+            </div>
+            <Plane size={18} />
+            <div>
+              <span>To</span>
+              <strong>{req.to}</strong>
+            </div>
+          </div>
+        )}
+
+        <div className="modal-details-grid">
+          <Detail label="Booking Type" value={booking.bookingType || "Flight"} icon={<TicketCheck size={16} />} />
+          <Detail label="Provider / Airline" value={booking.provider || "—"} icon={<Compass size={16} />} />
+          <Detail label="Total Cost" value={booking.cost ? `₹${Number(booking.cost).toLocaleString("en-IN")}` : "—"} icon={<WalletCards size={16} />} />
+          <Detail label="Cost Savings" value={booking.savings ? `₹${Number(booking.savings).toLocaleString("en-IN")}` : "₹0"} icon={<Sparkles size={16} />} />
+          <Detail label="Issue Date" value={formatRequestDate(booking.bookedAt)} icon={<CalendarDays size={16} />} />
+          <Detail label="Project / Request" value={req?.project ? `${req.project} (Req #${req.id})` : `Req #${booking.travelRequest?.id || "—"}`} icon={<FileText size={16} />} />
+        </div>
+
+        {req?.reason && (
+          <div className="reason-box">
+            <div className="reason-box-header">
+              <FileText size={14} />
+              <span>Employee Travel Justification</span>
+            </div>
+            <p className="reason-box-content">{req.reason}</p>
+          </div>
+        )}
+
+        {booking.notes && (
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.03)" }}>
+            <small style={{ fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase", fontSize: 10 }}>
+              Travel Desk Booking Notes:
+            </small>
+            <p style={{ margin: "4px 0 0", fontSize: 12, lineHeight: 1.5 }}>{booking.notes}</p>
+          </div>
+        )}
+
+        {/* Attached Ticket (Photo or PDF) */}
+        {booking.attachmentData && (
+          <div style={{ marginTop: 16, padding: 16, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--line)" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--ink-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              Attached Ticket Voucher / Boarding Pass
+            </span>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginTop: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                {booking.attachmentType?.includes("pdf") ? (
+                  <FileText size={26} className="text-red-500 shrink-0" />
+                ) : (
+                  <ImageIcon size={26} className="text-emerald-500 shrink-0" />
+                )}
+                <div style={{ minWidth: 0 }}>
+                  <strong style={{ display: "block", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {booking.attachmentName || "ticket_document"}
+                  </strong>
+                  <small style={{ fontSize: 11, color: "var(--ink-muted)" }}>
+                    {booking.attachmentType?.includes("pdf") ? "PDF Document" : "Ticket Image"}
+                  </small>
+                </div>
+              </div>
+              <a
+                href={booking.attachmentData}
+                download={booking.attachmentName || "ticket"}
+                target="_blank"
+                rel="noreferrer"
+                className="button button-small button-primary"
+                style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}
+              >
+                <Download size={13} /> Download Ticket
+              </a>
+            </div>
+
+            {booking.attachmentType?.includes("image") && (
+              <div style={{ marginTop: 12 }}>
+                <img
+                  src={booking.attachmentData}
+                  alt="Ticket preview"
+                  className="ticket-attachment-preview"
+                  style={{ maxHeight: 260 }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="dialog-actions" style={{ marginTop: 22 }}>
+          <button type="button" className="button button-primary" onClick={onClose}>
+            Close Details
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApproverBookings() {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [requests, setRequests] = useState<Journey[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    Promise.all([bookingsApi.list(), travelRequestsApi.list()])
+      .then(([nextBookings, nextRequests]) => {
+        if (!active) return;
+        setBookings(Array.isArray(nextBookings) ? nextBookings : []);
+        setRequests(Array.isArray(nextRequests) ? nextRequests.map(toJourney) : []);
+      })
+      .catch((err) => {
+        if (active) setError(err instanceof Error ? err.message : "Unable to load Travel Desk bookings.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const requestMap = useMemo(() => {
+    const map = new Map<string, Journey>();
+    for (const r of requests) {
+      map.set(String(r.id), r);
+    }
+    return map;
+  }, [requests]);
+
+  const activeBookings = bookings.filter((b) => !b?.cancelled);
+  const totalSpend = activeBookings.reduce((sum, b) => sum + (Number(b?.cost) || 0), 0);
+  const totalSavings = activeBookings.reduce((sum, b) => sum + (Number(b?.savings) || 0), 0);
+  const withAttachments = bookings.filter((b) => Boolean(b?.attachmentData)).length;
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return bookings;
+    return bookings.filter((b) => {
+      const req = requestMap.get(String(b?.travelRequest?.id));
+      const empName = req?.employee?.name || req?.passenger || "";
+      const ref = String(b?.bookingReference || "");
+      const prov = String(b?.provider || "");
+      const dest = req?.destination || "";
+      return (
+        empName.toLowerCase().includes(q) ||
+        ref.toLowerCase().includes(q) ||
+        prov.toLowerCase().includes(q) ||
+        dest.toLowerCase().includes(q)
+      );
+    });
+  }, [bookings, requestMap, query]);
+
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={pageMeta["/approver/bookings"]} />
+
+      <section className="ops-hero">
+        <div>
+          <span className="card-kicker">TRAVEL DESK AUDIT & VISIBILITY</span>
+          <h2>Travel desk confirmed bookings</h2>
+          <p>
+            Full visibility into tickets issued by the Travel Desk across your team. Inspect confirmed PNRs, ticket vouchers (PDF/photos), routes, and costs.
+          </p>
+        </div>
+        <div className="ops-hero-metric">
+          <span>Total spend</span>
+          <strong>₹{totalSpend.toLocaleString("en-IN")}</strong>
+          <small>{activeBookings.length} confirmed bookings</small>
+        </div>
+      </section>
+
+      <section className="stats-grid desk-stats">
+        <StatCard
+          label="Confirmed bookings"
+          value={String(activeBookings.length).padStart(2, "0")}
+          detail="Active ticketing records"
+          icon={<TicketCheck size={18} />}
+          accent="stat-accent"
+        />
+        <StatCard
+          label="Total travel spend"
+          value={`₹${totalSpend.toLocaleString("en-IN")}`}
+          detail="Sum of issued bookings"
+          icon={<WalletCards size={18} />}
+        />
+        <StatCard
+          label="Savings captured"
+          value={`₹${totalSavings.toLocaleString("en-IN")}`}
+          detail="Negotiated desk rates"
+          icon={<Sparkles size={18} />}
+        />
+        <StatCard
+          label="Tickets on file"
+          value={String(withAttachments).padStart(2, "0")}
+          detail="PDFs / Photos attached"
+          icon={<FileText size={18} />}
+        />
+      </section>
+
+      <div className="panel table-panel">
+        <div className="table-toolbar">
+          <div className="search-field">
+            <Search size={16} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter by employee name, PNR reference, airline/provider, or destination"
+            />
+          </div>
+          <span className="data-note">
+            <ShieldCheck size={13} /> Live Travel Desk data
+          </span>
+        </div>
+
+        {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+
+        {loading ? (
+          <EmptyState
+            icon={<Clock3 size={20} />}
+            title="Loading Travel Desk bookings"
+            description="Fetching tickets and booking records issued by the Travel Desk."
+          />
+        ) : filtered.length ? (
+          <div className="responsive-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Employee / Passenger</th>
+                  <th>PNR / Reference</th>
+                  <th>Route & Dates</th>
+                  <th>Type & Provider</th>
+                  <th>Cost & Savings</th>
+                  <th>Ticket copy</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((booking) => {
+                  const req = requestMap.get(String(booking?.travelRequest?.id));
+                  const emp = req?.employee || {
+                    name: req?.passenger || "Employee",
+                    employeeId: "EMP-2026",
+                    department: "Engineering",
+                  };
+                  return (
+                    <tr key={booking.id}>
+                      <td>
+                        <div className="table-journey">
+                          <span className="avatar avatar-tiny">
+                            {(emp.name || "E").slice(0, 2).toUpperCase()}
+                          </span>
+                          <span>
+                            <strong>{emp.name}</strong>
+                            <small>{emp.employeeId} · {emp.department}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <strong>{booking.bookingReference || "—"}</strong>
+                        <small className="table-subline">Req #{booking.travelRequest?.id || req?.id || "—"}</small>
+                      </td>
+                      <td>
+                        <strong>{req?.destination || "—"}</strong>
+                        <small className="table-subline">{req ? `${req.from} → ${req.to}` : booking.bookedAt ? formatRequestDate(booking.bookedAt) : "—"}</small>
+                      </td>
+                      <td>
+                        <strong>{booking.bookingType || "Flight"}</strong>
+                        <small className="table-subline">{booking.provider || "Standard provider"}</small>
+                      </td>
+                      <td>
+                        <strong>{booking.cost !== undefined ? `₹${Number(booking.cost).toLocaleString("en-IN")}` : "—"}</strong>
+                        {booking.savings ? (
+                          <small className="table-subline" style={{ color: "var(--green)" }}>
+                            Saved ₹{Number(booking.savings).toLocaleString("en-IN")}
+                          </small>
+                        ) : null}
+                      </td>
+                      <td>
+                        {booking.attachmentData ? (
+                          <a
+                            href={booking.attachmentData}
+                            download={booking.attachmentName || "ticket"}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ticket-badge"
+                            title={`Click to view/download ${booking.attachmentName || "ticket"}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {booking.attachmentType?.includes("pdf") ? (
+                              <FileText size={12} className="text-red-500" />
+                            ) : (
+                              <ImageIcon size={12} className="text-emerald-500" />
+                            )}
+                            <span>{booking.attachmentType?.includes("pdf") ? "PDF Ticket" : "Photo"}</span>
+                            <Download size={10} />
+                          </a>
+                        ) : (
+                          <span style={{ fontSize: 11, opacity: 0.4 }}>No attachment</span>
+                        )}
+                      </td>
+                      <td>
+                        <StatusBadge status={booking.cancelled ? "Cancelled" : "Booked"} />
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="table-action"
+                          onClick={() => setSelectedBooking({ booking, req })}
+                        >
+                          View details <ArrowUpRight size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            icon={<TicketCheck size={20} />}
+            title="No desk bookings found"
+            description="Bookings issued and ticketed by the Travel Desk will be listed here."
+          />
+        )}
+      </div>
+
+      {selectedBooking && (
+        <ApproverBookingDetailModal
+          item={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function Approvals({ history = false }: { history?: boolean }) {
   const { journeys, loading, error } = useTravelRequests();
   const [working, setWorking] = useState<string | null>(null);
+  const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null);
   const [confirmation, setConfirmation] = useState<{ journey: Journey; action: "approve" | "reject" } | null>(null);
   const user = getStoredUser<AuthUser>();
-  async function decide(journey: Journey, action: "approve" | "reject") { setWorking(`${action}-${journey.id}`); try { const approver = user?.username || "authenticated approver"; if (action === "approve") await travelRequestsApi.approve(journey.id, approver); else await travelRequestsApi.reject(journey.id, approver, "Rejected from Travora approval workspace."); toast.success(`Request ${action === "approve" ? "approved" : "rejected"}.`); window.location.reload(); } catch (decisionError) { toast.error(decisionError instanceof Error ? decisionError.message : "Decision could not be saved."); } finally { setWorking(null); setConfirmation(null); } }
+
+  async function decide(journey: Journey, action: "approve" | "reject") {
+    setWorking(`${action}-${journey.id}`);
+    try {
+      const approver = user?.username || "authenticated approver";
+      if (action === "approve") await travelRequestsApi.approve(journey.id, approver);
+      else await travelRequestsApi.reject(journey.id, approver, "Rejected from Travora approval workspace.");
+      toast.success(`Request ${action === "approve" ? "approved" : "rejected"}.`);
+      window.location.reload();
+    } catch (decisionError) {
+      toast.error(decisionError instanceof Error ? decisionError.message : "Decision could not be saved.");
+    } finally {
+      setWorking(null);
+      setConfirmation(null);
+    }
+  }
+
   const rows = history ? journeys.filter((journey) => journey.status !== "Pending approval") : journeys.filter((journey) => journey.status === "Pending approval");
-  return <div className="page-stack animate-page"><PageTitle meta={pageMeta[history ? "/approver/history" : "/approver"]} /><div className="summary-strip"><div><span className="card-kicker">{history ? "DECISION LOG" : "NEEDS YOUR REVIEW"}</span><strong>{String(rows.length).padStart(2, "0")}</strong><span>{history ? "decisions recorded" : "requests waiting"}</span></div><div className="strip-icon"><FileCheck2 size={22} /></div></div><div className="panel table-panel"><div className="section-title-row"><div><span className="card-kicker">{history ? "BACKEND HISTORY" : "PENDING REQUESTS"}</span><h2 className="section-heading">{history ? "Recent approval activity" : "Requests ready for review"}</h2></div><span className="data-note"><ShieldCheck size={13} /> Live backend data</span></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}{loading ? <EmptyState icon={<Clock3 size={20} />} title="Loading approvals" description="Fetching requests from Travora." /> : rows.length ? <div className="approval-list">{rows.map((request) => <div className="approval-item" key={request.id}><div className="approval-identity"><div className="avatar">{request.destination.slice(0, 2).toUpperCase()}</div><div><strong>{request.destination}</strong><span>{request.id} · {request.project}</span></div></div><div className="approval-route"><strong>{request.from} → {request.to}</strong><span>{request.dates} · {request.tripType}</span></div><div className="approval-amount"><span>Status</span><StatusBadge status={request.status} /></div>{history ? <StatusBadge status={request.status} /> : <div className="approval-actions"><button className="button button-small button-ghost" disabled={working !== null} onClick={() => setConfirmation({ journey: request, action: "reject" })}>Reject</button><button className="button button-small button-primary" disabled={working !== null} onClick={() => setConfirmation({ journey: request, action: "approve" })}>Approve</button></div>}</div>)}</div> : <EmptyState icon={<FileCheck2 size={20} />} title={history ? "No decisions yet" : "No requests waiting"} description={history ? "Completed approval decisions will appear here." : "New pending requests will appear here when submitted."} />}</div>{confirmation && <ConfirmDialog action={confirmation.action} onClose={() => setConfirmation(null)} onConfirm={() => decide(confirmation.journey, confirmation.action)} />}</div>;
+
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={pageMeta[history ? "/approver/history" : "/approver"]} />
+      <div className="summary-strip">
+        <div>
+          <span className="card-kicker">{history ? "DECISION LOG" : "NEEDS YOUR REVIEW"}</span>
+          <strong>{String(rows.length).padStart(2, "0")}</strong>
+          <span>{history ? "decisions recorded" : "requests waiting"}</span>
+        </div>
+        <div className="strip-icon">
+          <FileCheck2 size={22} />
+        </div>
+      </div>
+
+      <div className="panel table-panel">
+        <div className="section-title-row">
+          <div>
+            <span className="card-kicker">{history ? "BACKEND HISTORY" : "PENDING REQUESTS"}</span>
+            <h2 className="section-heading">{history ? "Recent approval activity" : "Requests ready for review"}</h2>
+          </div>
+          <span className="data-note"><ShieldCheck size={13} /> Live backend data</span>
+        </div>
+
+        {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+
+        {loading ? (
+          <EmptyState icon={<Clock3 size={20} />} title="Loading approvals" description="Fetching requests from Travora." />
+        ) : rows.length ? (
+          <div className="approval-list">
+            {rows.map((request) => {
+              const emp = request.employee || { name: request.passenger, employeeId: "EMP-2026", department: "Engineering", designation: "Lead Architect" };
+              return (
+                <div className="approval-item approval-item-rich" key={request.id}>
+                  <div className="approval-identity">
+                    <div className="avatar">
+                      {(emp.name || request.passenger || request.destination).slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <strong>{emp.name || request.passenger}</strong>
+                      <span style={{ fontSize: 10, color: "var(--ink-muted)" }}>
+                        {emp.employeeId || "EMP"} · {emp.department || "Dept"} · {emp.designation || "Staff"}
+                      </span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--navy)" }}>
+                        {request.destination} ({request.project})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="approval-route">
+                    <strong>{request.from} → {request.to}</strong>
+                    <span>{request.dates} · {request.tripType}</span>
+                    {request.reason && (
+                      <small style={{ color: "var(--ink-muted)", fontStyle: "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+                        "{request.reason}"
+                      </small>
+                    )}
+                  </div>
+                  <div className="approval-amount">
+                    <span>Status</span>
+                    <StatusBadge status={request.status} />
+                  </div>
+                  <div className="approval-actions" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <button
+                      type="button"
+                      className="button button-small button-ghost"
+                      onClick={() => setSelectedJourney(request)}
+                      title="View all details submitted by employee"
+                    >
+                      View details <ArrowUpRight size={13} />
+                    </button>
+                    {!history && (
+                      <>
+                        <button
+                          type="button"
+                          className="button button-small button-ghost"
+                          disabled={working !== null}
+                          onClick={() => setConfirmation({ journey: request, action: "reject" })}
+                        >
+                          Reject
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-small button-primary"
+                          disabled={working !== null}
+                          onClick={() => setConfirmation({ journey: request, action: "approve" })}
+                        >
+                          Approve
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState
+            icon={<FileCheck2 size={20} />}
+            title={history ? "No decisions yet" : "No requests waiting"}
+            description={history ? "Completed approval decisions will appear here." : "New pending requests will appear here when submitted."}
+          />
+        )}
+      </div>
+
+      {selectedJourney && (
+        <ApproverRequestDetailsModal
+          journey={selectedJourney}
+          onClose={() => setSelectedJourney(null)}
+          onApprove={(j) => setConfirmation({ journey: j, action: "approve" })}
+          onReject={(j) => setConfirmation({ journey: j, action: "reject" })}
+        />
+      )}
+
+      {confirmation && (
+        <ConfirmDialog
+          action={confirmation.action}
+          onClose={() => setConfirmation(null)}
+          onConfirm={() => decide(confirmation.journey, confirmation.action)}
+        />
+      )}
+    </div>
+  );
 }
-function ConfirmDialog({ action, onClose, onConfirm }: { action: "approve" | "reject"; onClose: () => void; onConfirm: () => void }) { const Icon = action === "approve" ? Check : XCircle; return <div className="modal-overlay"><div className="confirm-dialog"><button className="icon-button dialog-close" onClick={onClose}><X size={18} /></button><div className={`confirm-icon ${action}`}><Icon size={22} /></div><span className="card-kicker">CONFIRM DECISION</span><h2>{action === "approve" ? "Approve this request?" : "Reject this request?"}</h2><p>{action === "approve" ? "This will move the request into the Travel Desk workflow." : "This will mark the request as rejected for the employee."}</p><div className="dialog-actions"><button className="button button-ghost" onClick={onClose}>Go back</button><button className={`button ${action === "approve" ? "button-primary" : "button-danger"}`} onClick={onConfirm}>{action === "approve" ? "Approve request" : "Reject request"}</button></div></div></div>; }
+
+function ConfirmDialog({ action, onClose, onConfirm }: { action: "approve" | "reject"; onClose: () => void; onConfirm: () => void }) {
+  const Icon = action === "approve" ? Check : XCircle;
+  return (
+    <div className="modal-overlay">
+      <div className="confirm-dialog">
+        <button className="icon-button dialog-close" onClick={onClose}><X size={18} /></button>
+        <div className={`confirm-icon ${action}`}><Icon size={22} /></div>
+        <span className="card-kicker">CONFIRM DECISION</span>
+        <h2>{action === "approve" ? "Approve this request?" : "Reject this request?"}</h2>
+        <p>{action === "approve" ? "This will move the request into the Travel Desk workflow for confirmed ticketing." : "This will mark the request as rejected for the employee."}</p>
+        <div className="dialog-actions">
+          <button className="button button-ghost" onClick={onClose}>Go back</button>
+          <button className={`button ${action === "approve" ? "button-primary" : "button-danger"}`} onClick={onConfirm}>
+            {action === "approve" ? "Approve request" : "Reject request"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TravelDesk() {
   const [location] = useLocation();
@@ -473,18 +1308,190 @@ function TravelDesk() {
   const [bookingJourney, setBookingJourney] = useState<Journey | null>(null);
   const [editingBooking, setEditingBooking] = useState<any | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState<any | null>(null);
-  useEffect(() => { let active = true; setBookingsLoading(true); setBookingError(""); bookingsApi.list().then((data) => { if (active) setBookingRecords(Array.isArray(data) ? data : []); }).catch((requestError) => { if (active) setBookingError(requestError instanceof Error ? requestError.message : "Booking data is unavailable."); }).finally(() => { if (active) setBookingsLoading(false); }); return () => { active = false; }; }, [refreshKey]);
+
+  useEffect(() => {
+    let active = true;
+    setBookingsLoading(true);
+    setBookingError("");
+    bookingsApi.list().then((data) => {
+      if (active) setBookingRecords(Array.isArray(data) ? data : []);
+    }).catch((requestError) => {
+      if (active) setBookingError(requestError instanceof Error ? requestError.message : "Booking data is unavailable.");
+    }).finally(() => {
+      if (active) setBookingsLoading(false);
+    });
+    return () => { active = false; };
+  }, [refreshKey]);
+
   const bookedIds = useMemo(() => new Set(bookingRecords.filter((booking) => !booking?.cancelled).map((booking) => String(booking?.travelRequest?.id ?? "")).filter(Boolean)), [bookingRecords]);
   const rows = journeys.map((journey) => bookedIds.has(journey.id) ? { ...journey, status: "Booked" as const } : journey);
   const activeBookings = bookingRecords.filter((booking) => !booking?.cancelled);
   const cancelledBookings = bookingRecords.filter((booking) => Boolean(booking?.cancelled));
   const approvedCount = rows.filter((row) => row.status === "Approved").length;
   const pendingApproverCount = rows.filter((row) => row.status === "Pending approval").length;
+
   async function refresh() { setRefreshKey((value) => value + 1); }
   async function createBooking(payload: Record<string, unknown>) { await bookingsApi.create(payload); setBookingJourney(null); toast.success("Booking created. The Travel Desk queue has been refreshed."); await refresh(); }
   async function updateBooking(id: string, payload: Record<string, unknown>) { await bookingsApi.update(id, payload); setEditingBooking(null); toast.success("Booking details updated."); await refresh(); }
   async function cancelBooking(id: string, reason: string, charge: number) { await bookingsApi.cancel(id, reason, charge); setCancellingBooking(null); toast.success("Booking cancelled successfully."); await refresh(); }
-  return <div className="page-stack animate-page"><PageTitle meta={pageMeta[cancellationsMode ? "/travel-desk/cancellations" : "/travel-desk"]} />{cancellationsMode ? <><section className="summary-strip"><div><span className="card-kicker">CANCELLATION DESK</span><strong>{String(activeBookings.length).padStart(2, "0")}</strong><span>active bookings</span></div><div className="strip-icon"><XCircle size={22} /></div></section><div className="panel table-panel"><div className="section-title-row"><div><span className="card-kicker">BOOKING RECORDS</span><h2 className="section-heading">Manage cancellations</h2></div><span className="data-note"><ShieldCheck size={13} /> Live backend data</span></div>{bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}{bookingsLoading ? <EmptyState icon={<Clock3 size={20} />} title="Loading bookings" description="Fetching booking records from Travora." /> : bookingRecords.length ? <BookingTable bookings={bookingRecords} onEdit={setEditingBooking} onCancel={setCancellingBooking} /> : <EmptyState icon={<XCircle size={20} />} title="No booking records" description="Booking records will appear here from the backend." />}</div></> : <><section className="ops-hero"><div><span className="card-kicker">TODAY IN OPERATIONS</span><h2>Keep the journey moving.</h2><p>Employee travel requests reach the desk immediately. Prepare bookings in advance or issue tickets once approved.</p><Link href="/travel-desk/bookings" className="button button-primary">Open booking queue <ArrowUpRight size={16} /></Link></div><div className="ops-hero-metric"><span>Ready to book</span><strong>{String(approvedCount).padStart(2, "0")}</strong><small>approved trips</small></div></section><div className="stats-grid desk-stats"><StatCard label="Approved to book" value={String(approvedCount).padStart(2, "0")} detail="Ready for ticketing" icon={<ShieldCheck size={18} />} accent="stat-accent" /><StatCard label="Pending approval" value={String(pendingApproverCount).padStart(2, "0")} detail="Early desk visibility" icon={<Clock3 size={18} />} /><StatCard label="Confirmed booked" value={String(activeBookings.length).padStart(2, "0")} detail="Live booking records" icon={<TicketCheck size={18} />} /><StatCard label="Cancellations" value={String(cancelledBookings.length).padStart(2, "0")} detail="Current status" icon={<XCircle size={18} />} /></div><div className="panel table-panel"><div className="section-title-row"><div><span className="card-kicker">OPERATIONS QUEUE</span><h2 className="section-heading">All employee travel requests</h2></div><span className="data-note"><ShieldCheck size={13} /> Live backend data</span></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}{bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}{loading || bookingsLoading ? <EmptyState icon={<Clock3 size={20} />} title="Loading queue" description="Fetching travel requests and booking records from Travora." /> : rows.length ? <div className="responsive-table"><table><thead><tr><th>Journey</th><th>Route</th><th>Travel dates</th><th>Approver status</th><th>Action</th></tr></thead><tbody>{rows.map((row) => { const record = activeBookings.find((booking) => String(booking?.travelRequest?.id) === row.id); const isApproved = row.status === "Approved"; const isPending = row.status === "Pending approval"; const isBooked = row.status === "Booked"; return <tr key={row.id}><td><div className="table-journey"><span className="avatar avatar-tiny">{row.destination.slice(0, 2).toUpperCase()}</span><span><strong>{row.destination}</strong><small>{row.id} · {row.project}{row.passenger ? ` · ${row.passenger}` : ""}</small></span></div></td><td>{row.from} → {row.to}</td><td>{row.dates}</td><td>{isApproved ? <span className="approval-pill approved"><Check size={12} /> Approver Approved</span> : isPending ? <span className="approval-pill pending"><Clock3 size={12} /> Not Approved Yet</span> : isBooked ? <span className="approval-pill booked"><TicketCheck size={12} /> Booked & Ticketed</span> : <StatusBadge status={row.status} />}</td><td>{isApproved ? <button className="table-action" onClick={() => setBookingJourney(row)}>Add booking <ArrowUpRight size={14} /></button> : isPending ? <button className="table-action" onClick={() => setBookingJourney(row)}>Prepare booking <ArrowUpRight size={14} /></button> : record ? <button className="table-action" onClick={() => setEditingBooking(record)}>View / edit <ArrowUpRight size={14} /></button> : <span className="table-action table-action-muted">Booked <Check size={14} /></span>}</td></tr>; })}</tbody></table></div> : <EmptyState icon={<TicketCheck size={20} />} title="No travel requests" description="Employee travel requests will appear here immediately upon submission." />}</div></>}{bookingJourney && <BookingDialog journey={bookingJourney} onClose={() => setBookingJourney(null)} onSubmit={createBooking} />}{editingBooking && <BookingEditDialog booking={editingBooking} onClose={() => setEditingBooking(null)} onSubmit={updateBooking} />}{cancellingBooking && <CancellationDialog booking={cancellingBooking} onClose={() => setCancellingBooking(null)} onSubmit={cancelBooking} />}</div>;
+
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={pageMeta[cancellationsMode ? "/travel-desk/cancellations" : "/travel-desk"]} />
+      {cancellationsMode ? (
+        <>
+          <section className="summary-strip">
+            <div>
+              <span className="card-kicker">CANCELLATION DESK</span>
+              <strong>{String(activeBookings.length).padStart(2, "0")}</strong>
+              <span>active bookings</span>
+            </div>
+            <div className="strip-icon"><XCircle size={22} /></div>
+          </section>
+          <div className="panel table-panel">
+            <div className="section-title-row">
+              <div>
+                <span className="card-kicker">BOOKING RECORDS</span>
+                <h2 className="section-heading">Manage cancellations</h2>
+              </div>
+              <span className="data-note"><ShieldCheck size={13} /> Live backend data</span>
+            </div>
+            {bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}
+            {bookingsLoading ? (
+              <EmptyState icon={<Clock3 size={20} />} title="Loading bookings" description="Fetching booking records from Travora." />
+            ) : bookingRecords.length ? (
+              <BookingTable bookings={bookingRecords} onEdit={setEditingBooking} onCancel={setCancellingBooking} />
+            ) : (
+              <EmptyState icon={<XCircle size={20} />} title="No booking records" description="Booking records will appear here from the backend." />
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <section className="ops-hero">
+            <div>
+              <span className="card-kicker">TODAY IN OPERATIONS</span>
+              <h2>Keep the journey moving.</h2>
+              <p>Employee travel requests reach the desk immediately. Prepare bookings in advance or issue tickets once approved.</p>
+              <Link href="/travel-desk/bookings" className="button button-primary">Open booking queue <ArrowUpRight size={16} /></Link>
+            </div>
+            <div className="ops-hero-metric">
+              <span>Ready to book</span>
+              <strong>{String(approvedCount).padStart(2, "0")}</strong>
+              <small>approved trips</small>
+            </div>
+          </section>
+
+          <div className="stats-grid desk-stats">
+            <StatCard label="Approved to book" value={String(approvedCount).padStart(2, "0")} detail="Ready for ticketing" icon={<ShieldCheck size={18} />} accent="stat-accent" />
+            <StatCard label="Pending approval" value={String(pendingApproverCount).padStart(2, "0")} detail="Early desk visibility" icon={<Clock3 size={18} />} />
+            <StatCard label="Confirmed booked" value={String(activeBookings.length).padStart(2, "0")} detail="Live booking records" icon={<TicketCheck size={18} />} />
+            <StatCard label="Cancellations" value={String(cancelledBookings.length).padStart(2, "0")} detail="Current status" icon={<XCircle size={18} />} />
+          </div>
+
+          <div className="panel table-panel">
+            <div className="section-title-row">
+              <div>
+                <span className="card-kicker">OPERATIONS QUEUE</span>
+                <h2 className="section-heading">All employee travel requests</h2>
+              </div>
+              <span className="data-note"><ShieldCheck size={13} /> Live backend data</span>
+            </div>
+
+            {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+            {bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}
+
+            {loading || bookingsLoading ? (
+              <EmptyState icon={<Clock3 size={20} />} title="Loading queue" description="Fetching travel requests and booking records from Travora." />
+            ) : rows.length ? (
+              <div className="responsive-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Employee / Passenger</th>
+                      <th>Journey & Route</th>
+                      <th>Travel dates</th>
+                      <th>Approver status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const record = activeBookings.find((booking) => String(booking?.travelRequest?.id) === row.id);
+                      const isApproved = row.status === "Approved";
+                      const isPending = row.status === "Pending approval";
+                      const isBooked = row.status === "Booked";
+                      const emp = row.employee || {
+                        name: row.passenger,
+                        employeeId: "EMP-2026",
+                        department: "Engineering",
+                        designation: "Lead Architect",
+                      };
+
+                      return (
+                        <tr key={row.id}>
+                          <td>
+                            <div className="table-journey">
+                              <span className="avatar avatar-tiny">
+                                {(emp.name || row.passenger || "E").slice(0, 2).toUpperCase()}
+                              </span>
+                              <span>
+                                <strong>{emp.name || row.passenger}</strong>
+                                <small>{emp.employeeId} · {emp.department} · {emp.designation}</small>
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <strong>{row.destination}</strong>
+                            <small className="table-subline">{row.from} → {row.to} · {row.project}</small>
+                          </td>
+                          <td>{row.dates}</td>
+                          <td>
+                            {isApproved ? (
+                              <span className="approval-pill approved"><Check size={12} /> Approver Approved</span>
+                            ) : isPending ? (
+                              <span className="approval-pill pending"><Clock3 size={12} /> Not Approved Yet</span>
+                            ) : isBooked ? (
+                              <span className="approval-pill booked"><TicketCheck size={12} /> Booked & Ticketed</span>
+                            ) : (
+                              <StatusBadge status={row.status} />
+                            )}
+                          </td>
+                          <td>
+                            {isApproved ? (
+                              <button className="table-action" onClick={() => setBookingJourney(row)}>
+                                Add booking <ArrowUpRight size={14} />
+                              </button>
+                            ) : isPending ? (
+                              <button className="table-action" onClick={() => setBookingJourney(row)}>
+                                Prepare booking <ArrowUpRight size={14} />
+                              </button>
+                            ) : record ? (
+                              <button className="table-action" onClick={() => setEditingBooking(record)}>
+                                View / edit <ArrowUpRight size={14} />
+                              </button>
+                            ) : (
+                              <span className="table-action table-action-muted">Booked <Check size={14} /></span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState icon={<TicketCheck size={20} />} title="No travel requests" description="Employee travel requests will appear here immediately upon submission." />
+            )}
+          </div>
+        </>
+      )}
+
+      {bookingJourney && <BookingDialog journey={bookingJourney} onClose={() => setBookingJourney(null)} onSubmit={createBooking} />}
+      {editingBooking && <BookingEditDialog booking={editingBooking} onClose={() => setEditingBooking(null)} onSubmit={updateBooking} />}
+      {cancellingBooking && <CancellationDialog booking={cancellingBooking} onClose={() => setCancellingBooking(null)} onSubmit={cancelBooking} />}
+    </div>
+  );
 }
 
 function BookingDialog({ journey, onClose, onSubmit }: { journey: Journey; onClose: () => void; onSubmit: (payload: Record<string, unknown>) => Promise<void> }) {
@@ -540,9 +1547,216 @@ function BookingDialog({ journey, onClose, onSubmit }: { journey: Journey; onClo
     } catch (submitError) { setError(submitError instanceof Error ? submitError.message : "We couldn't create this booking."); }
     finally { setSubmitting(false); }
   }
-  return <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="booking-dialog-title"><div className="booking-dialog"><button className="icon-button dialog-close" onClick={onClose} aria-label="Close booking form"><X size={18} /></button><div className="booking-dialog-header"><div className="confirm-icon approve"><TicketCheck size={22} /></div><span className="card-kicker">TRAVEL DESK BOOKING</span><h2 id="booking-dialog-title">Add booking & ticket details</h2><p>Attach confirmed ticket information, photo, or PDF voucher to this journey.</p></div>{journey.status === "Approved" ? <div className="approver-box-approved"><ShieldCheck size={20} className="shrink-0" /><div><strong>✓ Approver Decision: Approved</strong><p style={{ fontSize: 12, margin: "2px 0 0" }}>Approved by {journey.approverName || "Assigned Manager"}. Authorized for confirmed ticketing and issuance.</p></div></div> : <div className="approver-box-pending"><Clock3 size={20} className="shrink-0" /><div><strong>⏳ Notice: Trip Not Approved Yet</strong><p style={{ fontSize: 12, margin: "2px 0 0" }}>This trip was raised by the employee and routed to Travel Desk for visibility. Manager sign-off is pending.</p></div></div>}<div className="booking-request-summary"><span className="avatar avatar-tiny">{journey.destination.slice(0, 2).toUpperCase()}</span><div><strong>{journey.destination}</strong><span>{journey.id} · {journey.from} → {journey.to} · {journey.dates}</span></div><StatusBadge status={journey.status} /></div><form className="booking-form" onSubmit={submit}><div className="form-grid"><label className="field"><span>Booking type <em>*</em></span><select name="bookingType" defaultValue="" required><option value="" disabled>Select type</option><option value="FLIGHT">Flight</option><option value="BUS">Bus</option><option value="CAB">Cab</option><option value="TRAIN">Train</option><option value="HOTEL">Hotel</option></select></label><label className="field"><span>Booking reference / PNR <em>*</em></span><input name="bookingReference" required placeholder="e.g. AI-7H2K9" /></label><label className="field"><span>Provider / Airline</span><input name="provider" placeholder="e.g. Air India, Indigo, Marriott" /></label><label className="field"><span>Cost (₹) <em>*</em></span><input name="cost" required type="number" min="0" step="0.01" placeholder="0.00" /></label><label className="field"><span>Savings (₹)</span><input name="savings" type="number" min="0" step="0.01" placeholder="0.00" /></label></div><div className="field"><span>Attach ticket copy (Photo or PDF)</span>{!attachmentData ? <label className="ticket-upload-box"><input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={handleFileChange} style={{ display: "none" }} /><Upload size={22} className="text-amber-500" /><strong style={{ fontSize: 13 }}>Click to upload ticket photo or PDF voucher</strong><span style={{ fontSize: 11, opacity: 0.75 }}>Supports PNG, JPG, WEBP, or PDF up to 8MB</span></label> : <div><div className="ticket-file-chip"><div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>{attachmentType.includes("pdf") ? <FileText size={20} className="text-red-500 shrink-0" /> : <ImageIcon size={20} className="text-emerald-500 shrink-0" />}<span style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachmentName}</span><small style={{ opacity: 0.7, fontSize: 11 }}>({attachmentSize})</small></div><button type="button" className="icon-button" onClick={() => { setAttachmentData(""); setAttachmentName(""); setAttachmentType(""); setAttachmentSize(""); }} title="Remove attachment"><X size={14} /></button></div>{attachmentType.includes("image") && <img src={attachmentData} alt="Ticket preview" className="ticket-attachment-preview" style={{ marginTop: 8 }} />}</div>}</div><label className="field"><span>Notes / Itinerary instructions</span><textarea name="notes" rows={2} placeholder="Add seat details, terminal info, or instructions for the employee." /></label>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}<div className="dialog-actions"><button type="button" className="button button-ghost" onClick={onClose} disabled={submitting}>Cancel</button><button type="submit" className="button button-primary" disabled={submitting}>{submitting ? "Issuing booking…" : "Save booking & ticket"} <ArrowUpRight size={16} /></button></div></form></div></div>;
+
+  const emp = journey.employee || {
+    name: journey.passenger,
+    employeeId: "EMP-2026",
+    department: "Engineering",
+    designation: "Lead Architect",
+  };
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="booking-dialog-title">
+      <div className="booking-dialog">
+        <button className="icon-button dialog-close" onClick={onClose} aria-label="Close booking form"><X size={18} /></button>
+        <div className="booking-dialog-header">
+          <div className="confirm-icon approve"><TicketCheck size={22} /></div>
+          <span className="card-kicker">TRAVEL DESK BOOKING</span>
+          <h2 id="booking-dialog-title">Add booking & ticket details</h2>
+          <p>Attach confirmed ticket information, photo, or PDF voucher to this journey.</p>
+        </div>
+
+        {/* Employee Profile Card for Travel Desk */}
+        <div className="employee-profile-card" style={{ margin: "14px 0" }}>
+          <div className="employee-avatar-large">
+            {(emp.name || journey.passenger || "E").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="employee-profile-info">
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--ink-muted)" }}>
+              Passenger Details
+            </span>
+            <h3>{emp.name || journey.passenger}</h3>
+            <div className="employee-meta-chips">
+              <span className="meta-chip meta-chip-primary">
+                <UserRound size={12} /> ID: {emp.employeeId || "EMP-2026"}
+              </span>
+              <span className="meta-chip">
+                Department: {emp.department || "Engineering"}
+              </span>
+              <span className="meta-chip">
+                Designation: {emp.designation || "Lead Architect"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {journey.reason && (
+          <div className="reason-box" style={{ margin: "10px 0 16px" }}>
+            <div className="reason-box-header">
+              <FileText size={13} />
+              <span>Travel Purpose & Justification</span>
+            </div>
+            <p className="reason-box-content" style={{ fontSize: 12 }}>
+              {journey.reason}
+            </p>
+          </div>
+        )}
+
+        {journey.status === "Approved" ? (
+          <div className="approver-box-approved">
+            <ShieldCheck size={20} className="shrink-0" />
+            <div>
+              <strong>✓ Approver Decision: Approved</strong>
+              <p style={{ fontSize: 12, margin: "2px 0 0" }}>
+                Approved by {journey.approverName || "Assigned Manager"}. Authorized for confirmed ticketing and issuance.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="approver-box-pending">
+            <Clock3 size={20} className="shrink-0" />
+            <div>
+              <strong>⏳ Notice: Trip Not Approved Yet</strong>
+              <p style={{ fontSize: 12, margin: "2px 0 0" }}>
+                This trip was raised by the employee and routed to Travel Desk for visibility. Manager sign-off is pending.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="booking-request-summary">
+          <span className="avatar avatar-tiny">{journey.destination.slice(0, 2).toUpperCase()}</span>
+          <div>
+            <strong>{journey.destination}</strong>
+            <span>{journey.id} · {journey.from} → {journey.to} · {journey.dates}</span>
+          </div>
+          <StatusBadge status={journey.status} />
+        </div>
+
+        <form className="booking-form" onSubmit={submit}>
+          <div className="form-grid">
+            <label className="field">
+              <span>Booking type <em>*</em></span>
+              <select name="bookingType" defaultValue="" required>
+                <option value="" disabled>Select type</option>
+                <option value="FLIGHT">Flight</option>
+                <option value="BUS">Bus</option>
+                <option value="CAB">Cab</option>
+                <option value="TRAIN">Train</option>
+                <option value="HOTEL">Hotel</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Booking reference / PNR <em>*</em></span>
+              <input name="bookingReference" required placeholder="e.g. AI-7H2K9" />
+            </label>
+            <label className="field">
+              <span>Provider / Airline</span>
+              <input name="provider" placeholder="e.g. Air India, Indigo, Marriott" />
+            </label>
+            <label className="field">
+              <span>Cost (₹) <em>*</em></span>
+              <input name="cost" required type="number" min="0" step="0.01" placeholder="0.00" />
+            </label>
+            <label className="field">
+              <span>Savings (₹)</span>
+              <input name="savings" type="number" min="0" step="0.01" placeholder="0.00" />
+            </label>
+          </div>
+
+          <div className="field">
+            <span>Attach ticket copy (Photo or PDF)</span>
+            {!attachmentData ? (
+              <label className="ticket-upload-box">
+                <input type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={handleFileChange} style={{ display: "none" }} />
+                <Upload size={22} className="text-amber-500" />
+                <strong style={{ fontSize: 13 }}>Click to upload ticket photo or PDF voucher</strong>
+                <span style={{ fontSize: 11, opacity: 0.75 }}>Supports PNG, JPG, WEBP, or PDF up to 8MB</span>
+              </label>
+            ) : (
+              <div>
+                <div className="ticket-file-chip">
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    {attachmentType.includes("pdf") ? <FileText size={20} className="text-red-500 shrink-0" /> : <ImageIcon size={20} className="text-emerald-500 shrink-0" />}
+                    <span style={{ fontWeight: 600, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attachmentName}</span>
+                    <small style={{ opacity: 0.7, fontSize: 11 }}>({attachmentSize})</small>
+                  </div>
+                  <button type="button" className="icon-button" onClick={() => { setAttachmentData(""); setAttachmentName(""); setAttachmentType(""); setAttachmentSize(""); }} title="Remove attachment"><X size={14} /></button>
+                </div>
+                {attachmentType.includes("image") && <img src={attachmentData} alt="Ticket preview" className="ticket-attachment-preview" style={{ marginTop: 8 }} />}
+              </div>
+            )}
+          </div>
+
+          <label className="field">
+            <span>Notes / Itinerary instructions</span>
+            <textarea name="notes" rows={2} placeholder="Add seat details, terminal info, or instructions for the employee." />
+          </label>
+
+          {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+
+          <div className="dialog-actions">
+            <button type="button" className="button button-ghost" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="submit" className="button button-primary" disabled={submitting}>{submitting ? "Issuing booking…" : "Save booking & ticket"} <ArrowUpRight size={16} /></button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 }
-function BookingTable({ bookings, onEdit, onCancel, cancellationOnly = false }: { bookings: any[]; onEdit: (booking: any) => void; onCancel: (booking: any) => void; cancellationOnly?: boolean }) { return <div className="responsive-table"><table><thead><tr><th>Reference</th><th>Type</th><th>Provider</th><th>Cost</th><th>Attachment</th><th>Status</th><th>Action</th></tr></thead><tbody>{bookings.map((booking) => <tr key={booking.id}><td><strong>{booking.bookingReference || "—"}</strong><small className="table-subline">Request {booking.travelRequest?.id || "—"}</small></td><td>{booking.bookingType || "—"}</td><td>{booking.provider || "—"}</td><td>{booking.cost !== undefined ? `₹${Number(booking.cost).toLocaleString("en-IN")}` : "—"}</td><td>{booking.attachmentData ? <span className="ticket-badge" title={booking.attachmentName || "Attached"}><FileText size={12} /> {booking.attachmentType?.includes("pdf") ? "PDF Ticket" : "Photo"}</span> : <span className="text-xs opacity-50">—</span>}</td><td><StatusBadge status={booking.cancelled ? "Cancelled" : "Booked"} /></td><td>{booking.cancelled || cancellationOnly ? <span className="table-action table-action-muted">{booking.cancelled ? "Cancelled" : "View"}</span> : <div className="table-inline-actions"><button className="table-action" onClick={() => onEdit(booking)}>Edit <ArrowUpRight size={14} /></button><button className="table-action table-action-danger" onClick={() => onCancel(booking)}>Cancel <XCircle size={14} /></button></div>}</td></tr>)}</tbody></table></div>; }
+
+function BookingTable({ bookings, onEdit, onCancel, cancellationOnly = false }: { bookings: any[]; onEdit: (booking: any) => void; onCancel: (booking: any) => void; cancellationOnly?: boolean }) {
+  return (
+    <div className="responsive-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>Type</th>
+            <th>Provider</th>
+            <th>Cost</th>
+            <th>Attachment</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bookings.map((booking) => (
+            <tr key={booking.id}>
+              <td>
+                <strong>{booking.bookingReference || "—"}</strong>
+                <small className="table-subline">Request {booking.travelRequest?.id || "—"}</small>
+              </td>
+              <td>{booking.bookingType || "—"}</td>
+              <td>{booking.provider || "—"}</td>
+              <td>{booking.cost !== undefined ? `₹${Number(booking.cost).toLocaleString("en-IN")}` : "—"}</td>
+              <td>
+                {booking.attachmentData ? (
+                  <span className="ticket-badge" title={booking.attachmentName || "Attached"}>
+                    <FileText size={12} /> {booking.attachmentType?.includes("pdf") ? "PDF Ticket" : "Photo"}
+                  </span>
+                ) : (
+                  <span className="text-xs opacity-50">—</span>
+                )}
+              </td>
+              <td><StatusBadge status={booking.cancelled ? "Cancelled" : "Booked"} /></td>
+              <td>
+                {booking.cancelled || cancellationOnly ? (
+                  <span className="table-action table-action-muted">{booking.cancelled ? "Cancelled" : "View"}</span>
+                ) : (
+                  <div className="table-inline-actions">
+                    <button className="table-action" onClick={() => onEdit(booking)}>Edit <ArrowUpRight size={14} /></button>
+                    <button className="table-action table-action-danger" onClick={() => onCancel(booking)}>Cancel <XCircle size={14} /></button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function BookingEditDialog({ booking, onClose, onSubmit }: { booking: any; onClose: () => void; onSubmit: (id: string, payload: Record<string, unknown>) => Promise<void> }) {
   const [submitting, setSubmitting] = useState(false);
@@ -704,95 +1918,118 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
   const [error, setError] = useState("");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setLoading(true); setError("");
-    try { const data = await loginApi({ username, password }); persistAuth(data); onAuthenticated(data); }
-    catch (loginError) { setError(loginError instanceof Error ? (loginError.message.includes("401") ? "Invalid username or password." : loginError.message) : "Unable to sign in."); }
-    finally { setLoading(false); }
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const data = await loginApi({ username: username.trim(), password });
+      persistAuth(data);
+      onAuthenticated(data);
+    } catch (loginError) {
+      setError(
+        loginError instanceof Error
+          ? loginError.message.includes("401")
+            ? "Invalid username or password."
+            : loginError.message
+          : "Unable to sign in."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
-
-  const roleAccounts = [
-    { role: "Employee", id: "employee", title: "Arjun Mehta (Lead Architect)", icon: "👤" },
-    { role: "Approver", id: "approver", title: "Rajesh Menon (VP / Approver)", icon: "📋" },
-    { role: "Travel Desk", id: "traveldesk", title: "Travel Desk Operations", icon: "✈️" },
-    { role: "Admin", id: "admin", title: "System Administrator", icon: "⚙️" },
-  ];
 
   return (
     <div className="login-page">
-      <button className="login-theme-toggle icon-button" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>
+      <button
+        className="login-theme-toggle icon-button"
+        aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+        onClick={toggleTheme}
+      >
         {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
       </button>
-      <div className="login-brand"><Logo /><span>Employee Travel Booking & Management System</span></div>
+      <div className="login-brand">
+        <Logo />
+        <span>Employee Travel Booking & Management System</span>
+      </div>
       <div className="login-layout">
         <div className="login-story">
           <span className="card-kicker">THE WORK TRIP, RECONSIDERED</span>
-          <h1>Travel well.<br /><em>Work better.</em></h1>
+          <h1>
+            Travel well.<br />
+            <em>Work better.</em>
+          </h1>
           <p>One calm workspace for every business journey — from the first request to the flight home.</p>
-          <div className="login-story-footer"><div className="story-line" /><span>Authorized company access</span></div>
+          <div className="login-story-footer">
+            <div className="story-line" />
+            <span>Authorized company access</span>
+          </div>
         </div>
         <div className="login-card">
           <span className="card-kicker">ENTERPRISE PORTAL</span>
           <h2>Sign in to Travora</h2>
-          <p>Sign in with your role login ID and password below.</p>
+          <p>Please enter your authorized username and password to continue.</p>
           <form onSubmit={submit}>
             <label className="field">
-              <span>Login ID</span>
-              <input type="text" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" placeholder="e.g. employee, approver, traveldesk, admin" />
+              <span>Username / Login ID</span>
+              <input
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                required
+                autoComplete="username"
+                placeholder="Enter your username (e.g. employee, approver, traveldesk, admin)"
+              />
             </label>
             <label className="field">
               <span>Password</span>
               <div className="password-field">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password (e.g. password)" />
-                <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((visible) => !visible)}
+                >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </label>
             {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
             <div className="login-options">
-              <span className="login-security"><ShieldCheck size={14} /> Role-based access control</span>
-              <button type="button" className="inline-link" onClick={() => toast("Default password for all role login IDs is 'password'.")}>Need credentials?</button>
+              <span className="login-security">
+                <ShieldCheck size={14} /> Role-based access control
+              </span>
+              <button
+                type="button"
+                className="inline-link"
+                onClick={() => toast("Contact your system administrator or use your assigned role login.")}
+              >
+                Need help?
+              </button>
             </div>
             <button type="submit" className="button button-primary button-wide" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}<ArrowUpRight size={16} />
+              {loading ? "Signing in…" : "Sign in"}
+              <ArrowUpRight size={16} />
             </button>
           </form>
 
-          {/* Role Login IDs Reference Panel */}
-          <div className="login-accounts-panel">
-            <div className="login-accounts-header">
-              <span>Authorized Role Login IDs</span>
-              <small style={{ fontSize: 11, opacity: 0.7 }}>Click ID to fill</small>
-            </div>
-            <div className="login-accounts-grid">
-              {roleAccounts.map((acc) => (
-                <button
-                  key={acc.id}
-                  type="button"
-                  className="login-account-item"
-                  onClick={() => {
-                    setUsername(acc.id);
-                    setPassword("password");
-                  }}
-                  title={`Click to fill ${acc.id}`}
-                >
-                  <div className="login-account-role">
-                    <strong>{acc.icon} {acc.role}</strong>
-                    <small>{acc.title}</small>
-                  </div>
-                  <span className="login-account-code">{acc.id}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="login-note mt-3">
             <ShieldCheck size={15} />
-            <span>Enterprise authentication enabled. Sign in with your assigned login ID to access your dedicated workspace.</span>
+            <span>Enterprise single-sign-on & authenticated workspaces active. Enter your assigned credentials.</span>
           </div>
         </div>
       </div>
-      <div className="login-bottom"><span>Travora · Secure business travel management</span><span>Need help? Contact your travel desk</span></div>
+      <div className="login-bottom">
+        <span>Travora · Secure business travel management</span>
+        <span>Need help? Contact your travel desk</span>
+      </div>
     </div>
   );
 }
@@ -820,10 +2057,18 @@ function ProfilePage({ user }: { user: AuthUser }) {
 
 function AppRouter() {
   const [location, setLocation] = useLocation();
-  const [user, setUser] = useState<AuthUser | null>(() => { const stored = getStoredUser<AuthUser>(); return getToken() && isValidAuthUser(stored) ? stored : null; });
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const stored = getStoredUser<AuthUser>();
+    return getToken() && isValidAuthUser(stored) ? stored : null;
+  });
   const path = location === "/" ? "/employee" : location;
   const role = user?.role;
-  const roleRoots: Record<Role, string> = { EMPLOYEE: "/employee", APPROVER: "/approver", TRAVEL_DESK: "/travel-desk", ADMIN: "/admin" };
+  const roleRoots: Record<Role, string> = {
+    EMPLOYEE: "/employee",
+    APPROVER: "/approver",
+    TRAVEL_DESK: "/travel-desk",
+    ADMIN: "/admin",
+  };
   const allowedPaths: Record<Role, string[]> = {
     EMPLOYEE: [
       "/employee",
@@ -835,21 +2080,63 @@ function AppRouter() {
       "/employee/reports",
       "/employee/support",
     ],
-    APPROVER: ["/approver", "/approver/history"],
-    TRAVEL_DESK: ["/travel-desk", "/travel-desk/bookings", "/travel-desk/cancellations"],
-    ADMIN: ["/admin", "/admin/employees", "/admin/requests", "/admin/bookings", "/admin/reports", "/admin/settings"],
+    APPROVER: [
+      "/approver",
+      "/approver/bookings",
+      "/approver/history",
+      "/employee/reports",
+      "/employee/support",
+    ],
+    TRAVEL_DESK: [
+      "/travel-desk",
+      "/travel-desk/bookings",
+      "/travel-desk/cancellations",
+      "/employee/reports",
+    ],
+    ADMIN: [
+      "/admin",
+      "/admin/employees",
+      "/admin/requests",
+      "/admin/bookings",
+      "/admin/reports",
+      "/admin/settings",
+    ],
   };
-  const onLogout = () => { clearAuth(); setUser(null); setLocation("/login"); };
+  const onLogout = () => {
+    clearAuth();
+    setUser(null);
+    setLocation("/login");
+  };
   const allowed = user && role ? allowedPaths[role].includes(path) : false;
+
   useEffect(() => {
-    const handleAuthExpired = () => { setUser(null); setLocation("/login"); };
+    const handleAuthExpired = () => {
+      setUser(null);
+      setLocation("/login");
+    };
     window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
   }, [setLocation]);
-  useEffect(() => { if (!user && location !== "/login") setLocation("/login"); else if (user && location === "/login") setLocation(roleRoots[user.role]); else if (user && !allowed) setLocation(roleRoots[user.role]); }, [user, location, allowed, setLocation]);
-  if (location === "/login") return <Login onAuthenticated={(nextUser) => { setUser(nextUser); setLocation(roleRoots[nextUser.role]); }} />;
+
+  useEffect(() => {
+    if (!user && location !== "/login") setLocation("/login");
+    else if (user && location === "/login") setLocation(roleRoots[user.role]);
+    else if (user && !allowed) setLocation(roleRoots[user.role]);
+  }, [user, location, allowed, setLocation]);
+
+  if (location === "/login") {
+    return (
+      <Login
+        onAuthenticated={(nextUser) => {
+          setUser(nextUser);
+          setLocation(roleRoots[nextUser.role]);
+        }}
+      />
+    );
+  }
   if (!user || !role) return null;
   if (!allowed) return null;
+
   let page: ReactNode;
   if (path === "/employee") page = <Dashboard user={user} />;
   else if (path === "/employee/plan-trip") page = <PlanTrip />;
@@ -861,13 +2148,28 @@ function AppRouter() {
   else if (path === "/employee/reports") page = <Reports />;
   else if (path === "/employee/support") page = <Support />;
   else if (path === "/approver") page = <Approvals />;
+  else if (path === "/approver/bookings") page = <ApproverBookings />;
   else if (path === "/approver/history") page = <Approvals history />;
   else if (path === "/travel-desk" || path === "/travel-desk/bookings" || path === "/travel-desk/cancellations") page = <TravelDesk />;
   else if (path.startsWith("/admin")) page = <Admin user={user} section={path === "/admin" ? "overview" : path.replace("/admin/", "")} />;
   else page = <Dashboard user={user} />;
-  return <AppShell role={role} user={user} onLogout={onLogout}>{page}</AppShell>;
+
+  return (
+    <AppShell role={role} user={user} onLogout={onLogout}>
+      {page}
+    </AppShell>
+  );
 }
 
-function App() { return <ErrorBoundary><ThemeProvider><Toaster position="bottom-right" /><AppRouter /></ThemeProvider></ErrorBoundary>; }
+function App() {
+  return (
+    <ErrorBoundary>
+      <ThemeProvider>
+        <Toaster position="bottom-right" />
+        <AppRouter />
+      </ThemeProvider>
+    </ErrorBoundary>
+  );
+}
 
 export default App;
