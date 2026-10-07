@@ -1,10 +1,13 @@
-/* Phase 12: centralized shared-surface theme polish. Imported by index.css. */
+/* Centralized shared-surface theme polish and modern visual upgrades. Imported by index.css. */
 :root {
   --surface-soft: #f7faf8;
   --surface-muted: #f5f8f6;
   --surface-input: #fbfcfb;
   --surface-hover: #f1f6f3;
   --overlay-soft: rgba(20, 34, 39, .38);
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(226, 232, 229, 0.85);
+  --glow-accent: rgba(231, 169, 71, 0.25);
 }
 
 .dark {
@@ -13,9 +16,75 @@
   --surface-input: #172a30;
   --surface-hover: #243b40;
   --overlay-soft: rgba(0, 0, 0, .58);
+  --glass-bg: rgba(27, 44, 46, 0.82);
+  --glass-border: rgba(43, 68, 74, 0.85);
+  --glow-accent: rgba(231, 169, 71, 0.35);
 }
 
-.dark .topbar { background: rgba(20, 35, 41, .94); border-color: var(--line); }
+/* Glassmorphism Cards */
+.panel, .stat-card, .welcome-card, .upcoming-card, .aside-card {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.stat-card:hover, .panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(24, 35, 41, 0.08);
+}
+
+.dark .stat-card:hover, .dark .panel:hover {
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+  border-color: rgba(57, 128, 100, 0.4);
+}
+
+/* Micro-interactions */
+.button, .nav-item, .table-action {
+  transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0px) scale(0.98);
+}
+
+.journey-row {
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.journey-row:hover {
+  transform: translateX(4px);
+}
+
+/* Animated Gradient Hero */
+.welcome-card {
+  background: linear-gradient(135deg, #1f353d 0%, #26424b 50%, #1a2d34 100%);
+  background-size: 200% 200%;
+  animation: mesh-flow 12s ease infinite alternate;
+}
+
+@keyframes mesh-flow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Topbar glass polish */
+.topbar {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+  backdrop-filter: blur(18px) !important;
+  -webkit-backdrop-filter: blur(18px) !important;
+}
+
+.dark .topbar {
+  background: rgba(20, 35, 41, 0.88) !important;
+  border-color: var(--glass-border) !important;
+}
+
 .dark .theme-toggle { color: var(--saffron); background: #2a4146; }
 .dark .theme-toggle:hover { color: #fff; background: #355158; }
 .dark .sidebar-overlay.visible { background: var(--overlay-soft); }
@@ -39,6 +108,22 @@
 .dark input[type="checkbox"], .dark input[type="radio"] { accent-color: var(--green); }
 .dark ::selection { color: var(--ink); background: #42675c; }
 
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(131, 144, 153, 0.35);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(131, 144, 153, 0.6);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .theme-toggle { transition: none; }
+  .theme-toggle, .welcome-card, .panel, .stat-card { transition: none; animation: none; }
 }

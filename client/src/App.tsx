@@ -36,6 +36,7 @@ import {
   EyeOff,
   X,
   XCircle,
+  Download,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -43,6 +44,13 @@ import { Link, useLocation } from "wouter";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AUTH_EXPIRED_EVENT, clearAuth, getStoredUser, getToken, isValidAuthUser, login as loginApi, persistAuth, travelRequestsApi, dashboardApi, employeesApi, bookingsApi, notificationsApi, healthApi, type AuthUser, type Role } from "./lib/api";
+import { CommandPalette } from "./components/CommandPalette";
+import { TravelCalendar } from "./components/TravelCalendar";
+import { Expenses } from "./pages/Expenses";
+import { Profile } from "./pages/Profile";
+import { InteractiveRouteMap } from "./components/InteractiveRouteMap";
+import { ActivityTimeline } from "./components/ActivityTimeline";
+import { exportToCsv } from "./utils/exportCsv";
 
 type Journey = {
   id: string;
@@ -93,6 +101,9 @@ const pageMeta: Record<string, { eyebrow: string; title: string; description?: s
   "/employee": { eyebrow: "Employee workspace", title: "Overview", description: "Your travel activity, requests and next steps in one place." },
   "/employee/plan-trip": { eyebrow: "Employee workspace", title: "Plan a trip", description: "Create a travel request with the details your approver needs." },
   "/employee/journeys": { eyebrow: "Employee workspace", title: "My journeys", description: "Follow every request from plan to return." },
+  "/employee/calendar": { eyebrow: "Employee workspace", title: "Travel calendar", description: "Interactive schedule of departures, returns and upcoming trips." },
+  "/employee/expenses": { eyebrow: "Employee workspace", title: "Expense tracker", description: "Submit trip receipts, claim reimbursements, and monitor compliance." },
+  "/employee/profile": { eyebrow: "Employee workspace", title: "Profile & preferences", description: "Personal details, airline frequent flyer perks, and travel settings." },
   "/employee/approvals": { eyebrow: "Employee workspace", title: "Approvals", description: "See what needs your attention and what is moving forward." },
   "/employee/reports": { eyebrow: "Employee workspace", title: "Reports", description: "A clear view of your travel activity and patterns." },
   "/employee/support": { eyebrow: "Employee workspace", title: "Support", description: "Answers and help for every stage of your trip." },
@@ -113,6 +124,9 @@ const navByRole: Record<Role, { label: string; href: string; icon: ReactNode }[]
     { label: "Overview", href: "/employee", icon: <LayoutDashboard size={17} /> },
     { label: "Plan a trip", href: "/employee/plan-trip", icon: <Plus size={17} /> },
     { label: "My journeys", href: "/employee/journeys", icon: <Compass size={17} /> },
+    { label: "Calendar", href: "/employee/calendar", icon: <CalendarDays size={17} /> },
+    { label: "Expenses", href: "/employee/expenses", icon: <WalletCards size={17} /> },
+    { label: "Profile", href: "/employee/profile", icon: <UserRound size={17} /> },
     { label: "Reports", href: "/employee/reports", icon: <BarChart3 size={17} /> },
     { label: "Support", href: "/employee/support", icon: <CircleHelp size={17} /> },
   ],
@@ -205,13 +219,59 @@ function Sidebar({ role, path, user, onLogout, onClose }: { role: Role; path: st
   );
 }
 
-function Topbar({ onMenu, meta, user }: { onMenu: () => void; meta: { title: string }; user: AuthUser }) {
+function Topbar({ onMenu, onOpenSearch, meta, user }: { onMenu: () => void; onOpenSearch: () => void; meta: { title: string }; user: AuthUser }) {
   const { theme, toggleTheme } = useTheme();
   const initials = (user.username || "Travora").slice(0, 2).toUpperCase();
   return (
     <header className="topbar">
-      <div className="topbar-left"><button className="icon-button mobile-only" aria-label="Open navigation" onClick={onMenu}><Menu size={20} /></button><div className="breadcrumb"><span>Travora</span><ChevronRight size={14} /><strong>{meta.title}</strong></div></div>
-      <div className="topbar-actions"><button className="icon-button theme-toggle" title={`Switch to ${theme === "light" ? "dark" : "light"} mode`} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><NotificationBell /><div className="topbar-divider" /><div className="topbar-user"><div className="avatar avatar-small">{initials}</div><div className="topbar-user-copy"><strong>{user.username}</strong><span>{roleLabels[user.role]}</span></div><ChevronDown size={15} className="muted-icon" /></div></div>
+      <div className="topbar-left">
+        <button className="icon-button mobile-only" aria-label="Open navigation" onClick={onMenu}>
+          <Menu size={20} />
+        </button>
+        <div className="breadcrumb">
+          <span>Travora</span>
+          <ChevronRight size={14} />
+          <strong>{meta.title}</strong>
+        </div>
+      </div>
+      <div className="topbar-actions">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[#e2e8e5] dark:border-[#2b444a] text-xs text-[#839099] bg-[#fbfcfb] dark:bg-[#1a2c30] hover:border-[#398064] transition-all hover:shadow-sm"
+          title="Press Cmd+K to search"
+        >
+          <Search size={14} />
+          <span>Search or Cmd+K</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-[#e2e8e5] dark:bg-[#203638] text-[10px] font-mono">⌘K</kbd>
+        </button>
+        <button
+          type="button"
+          className="icon-button sm:hidden"
+          onClick={onOpenSearch}
+          aria-label="Open command palette"
+        >
+          <Search size={18} />
+        </button>
+        <button
+          className="icon-button theme-toggle"
+          title={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
+          onClick={toggleTheme}
+        >
+          {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+        </button>
+        <NotificationBell />
+        <div className="topbar-divider" />
+        <Link href="/employee/profile" className="topbar-user hover:opacity-90 transition-opacity">
+          <div className="avatar avatar-small">{initials}</div>
+          <div className="topbar-user-copy">
+            <strong>{user.username}</strong>
+            <span>{roleLabels[user.role]}</span>
+          </div>
+          <ChevronDown size={15} className="muted-icon" />
+        </Link>
+      </div>
     </header>
   );
 }
@@ -241,15 +301,17 @@ function formatNotificationTime(value: unknown) { if (!value) return "Just now";
 function AppShell({ children, role, user, onLogout }: { children: ReactNode; role: Role; user: AuthUser; onLogout: () => void }) {
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const path = location === "/" ? "/employee" : location;
   const meta = pageMeta[path] ?? pageMeta["/employee"];
   useEffect(() => setMobileOpen(false), [location]);
   return (
     <div className="app-shell">
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} user={user} onLogout={onLogout} />
       <div className={`sidebar-overlay ${mobileOpen ? "visible" : ""}`} onClick={() => setMobileOpen(false)} />
       <div className={`sidebar-drawer ${mobileOpen ? "open" : ""}`}><Sidebar role={role} path={path} user={user} onLogout={onLogout} onClose={() => setMobileOpen(false)} /></div>
       <div className="desktop-sidebar"><Sidebar role={role} path={path} user={user} onLogout={onLogout} /></div>
-      <div className="app-main"><Topbar onMenu={() => setMobileOpen(true)} meta={meta} user={user} /><main className="content-wrap">{children}</main></div>
+      <div className="app-main"><Topbar onMenu={() => setMobileOpen(true)} onOpenSearch={() => setSearchOpen(true)} meta={meta} user={user} /><main className="content-wrap">{children}</main></div>
     </div>
   );
 }
@@ -275,6 +337,9 @@ function Dashboard({ user }: { user: AuthUser }) {
     <div className="section-title-row section-title-spaced"><div><span className="card-kicker">AT A GLANCE</span><h2 className="section-heading">Your travel pulse</h2></div><span className="data-note"><ShieldCheck size={13} /> Live backend data</span></div>
     <section className="stats-grid"><StatCard label="Total trips" value={String(stats.total).padStart(2, "0")} detail="From your account" icon={<Compass size={18} />} /><StatCard label="Upcoming trips" value={String(stats.upcoming).padStart(2, "0")} detail="Approved or booked" icon={<CalendarDays size={18} />} accent="stat-accent" /><StatCard label="Pending requests" value={String(stats.pending).padStart(2, "0")} detail="Needs approval" icon={<Clock3 size={18} />} /><StatCard label="Completed trips" value={String(stats.completed).padStart(2, "0")} detail="From your account" icon={<Check size={18} />} /></section>
     <section className="dashboard-lower-grid"><div className="panel recent-panel"><div className="section-title-row"><div><span className="card-kicker">RECENT ACTIVITY</span><h2 className="section-heading">My journeys</h2></div><Link href="/employee/journeys" className="text-link">View all <ArrowUpRight size={14} /></Link></div><div className="journey-list">{journeys.length ? journeys.slice(0, 3).map((journey) => <JourneyRow key={journey.id} journey={journey} />) : <EmptyState icon={<Compass size={20} />} title={loading ? "Loading journeys" : "No journeys yet"} description={loading ? "Fetching your travel activity." : "Your submitted travel requests will appear here."} />}</div></div><div className="panel status-panel"><div className="section-title-row"><div><span className="card-kicker">REQUEST FLOW</span><h2 className="section-heading">Where things stand</h2></div><Compass size={18} className="panel-icon" /></div><div className="flow-list"><FlowItem label="Pending approval" count={String(stats.pending).padStart(2, "0")} tone="pending" /><FlowItem label="Approved" count={String(journeys.filter((journey) => journey.status === "Approved").length).padStart(2, "0")} tone="approved" /><FlowItem label="Booked" count={String(journeys.filter((journey) => journey.status === "Booked").length).padStart(2, "0")} tone="booked" /><FlowItem label="Completed" count={String(stats.completed).padStart(2, "0")} tone="completed" /></div><Link href="/employee/reports" className="panel-footer-link">See travel reports <ArrowRightIcon /></Link></div></section>
+    <div className="mt-4">
+      <ActivityTimeline />
+    </div>
   </div>;
 }
 function ArrowRightIcon() { return <ChevronRight size={15} />; }
@@ -318,7 +383,15 @@ function Journeys() {
   useEffect(() => { let active = true; if (!journeys.length) { setBookingsByRequest({}); setBookingLoading(false); return; } const eligible = journeys.filter((journey) => ["Approved", "Booked", "Completed", "Cancelled"].includes(journey.status)); setBookingLoading(Boolean(eligible.length)); setBookingError(""); Promise.all(eligible.map(async (journey) => { try { const data = await bookingsApi.byTravelRequest(journey.id); return [journey.id, Array.isArray(data) ? data.find((booking: any) => booking && booking.cancelled !== true) || data[0] || null : data || null] as const; } catch (requestError) { throw requestError; } })).then((entries) => { if (active) setBookingsByRequest(Object.fromEntries(entries)); }).catch((requestError) => { if (active) setBookingError(requestError instanceof Error ? requestError.message : "Booking details are unavailable."); }).finally(() => { if (active) setBookingLoading(false); }); return () => { active = false; }; }, [journeys]);
   const hydratedJourneys = useMemo(() => journeys.map((journey) => { const booking = bookingsByRequest[journey.id]; if (booking?.cancelled) return { ...journey, status: "Cancelled" as const }; if (booking && journey.status === "Approved") return { ...journey, status: "Booked" as const }; return journey; }), [journeys, bookingsByRequest]);
   const filtered = useMemo(() => hydratedJourneys.filter((journey) => (filter === "All journeys" || journey.status === filter) && `${journey.destination} ${journey.project} ${journey.id}`.toLowerCase().includes(query.toLowerCase())), [hydratedJourneys, query, filter]);
-  return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/employee/journeys"]} /><div className="panel table-panel"><div className="table-toolbar"><div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search journeys" /></div><div className="toolbar-filters"><Filter size={15} /><select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All journeys</option><option>Pending approval</option><option>Approved</option><option>Booked</option><option>Completed</option><option>Cancelled</option></select></div><Link href="/employee/plan-trip" className="button button-primary"><Plus size={16} /> Plan a trip</Link></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}{bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}{loading || bookingLoading ? <EmptyState icon={<Clock3 size={20} />} title="Loading journeys" description="Fetching your travel requests and booking records from Travora." /> : filtered.length ? <div className="responsive-table"><table><thead><tr><th>Journey</th><th>Dates</th><th>Project</th><th>Status</th><th /></tr></thead><tbody>{filtered.map((journey) => <tr key={journey.id} onClick={() => setSelected(journey)}><td><div className="table-journey"><span className="journey-icon"><Plane size={15} /></span><span><strong>{journey.destination}</strong><small>{journey.id} · {journey.from} → {journey.to}</small></span></div></td><td>{journey.dates}</td><td>{journey.project}</td><td><StatusBadge status={journey.status} /></td><td><button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setSelected(journey); }}>{bookingsByRequest[journey.id] ? "View booking" : "View details"} <ArrowUpRight size={14} /></button></td></tr>)}</tbody></table></div> : <EmptyState icon={<Compass size={20} />} title="No journeys yet" description="Your submitted travel requests will appear here." action={<Link className="button button-primary button-small" href="/employee/plan-trip">Plan a trip</Link>} />}</div>{selected && <JourneyDrawer journey={selected} onClose={() => setSelected(null)} />}</div>;
+
+  const handleExportCsv = () => {
+    const headers = ["Journey ID", "Destination", "From", "To", "Dates", "Trip Type", "Project", "Status"];
+    const rows = filtered.map((j) => [j.id, j.destination, j.from, j.to, j.dates, j.tripType, j.project, j.status]);
+    exportToCsv("travora_journeys", headers, rows);
+    toast.success("Journeys exported to CSV.");
+  };
+
+  return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/employee/journeys"]} /><div className="panel table-panel"><div className="table-toolbar"><div className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search journeys" /></div><div className="toolbar-filters"><Filter size={15} /><select value={filter} onChange={(event) => setFilter(event.target.value)}><option>All journeys</option><option>Pending approval</option><option>Approved</option><option>Booked</option><option>Completed</option><option>Cancelled</option></select></div><div className="flex items-center gap-2"><button type="button" onClick={handleExportCsv} className="button button-ghost flex items-center gap-1.5"><Download size={14} /> Export CSV</button><Link href="/employee/plan-trip" className="button button-primary"><Plus size={16} /> Plan a trip</Link></div></div>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}{bookingError && <div className="form-error-message"><XCircle size={15} />{bookingError}</div>}{loading || bookingLoading ? <EmptyState icon={<Clock3 size={20} />} title="Loading journeys" description="Fetching your travel requests and booking records from Travora." /> : filtered.length ? <div className="responsive-table"><table><thead><tr><th>Journey</th><th>Dates</th><th>Project</th><th>Status</th><th /></tr></thead><tbody>{filtered.map((journey) => <tr key={journey.id} onClick={() => setSelected(journey)}><td><div className="table-journey"><span className="journey-icon"><Plane size={15} /></span><span><strong>{journey.destination}</strong><small>{journey.id} · {journey.from} → {journey.to}</small></span></div></td><td>{journey.dates}</td><td>{journey.project}</td><td><StatusBadge status={journey.status} /></td><td><button type="button" className="table-action" onClick={(event) => { event.stopPropagation(); setSelected(journey); }}>{bookingsByRequest[journey.id] ? "View booking" : "View details"} <ArrowUpRight size={14} /></button></td></tr>)}</tbody></table></div> : <EmptyState icon={<Compass size={20} />} title="No journeys yet" description="Your submitted travel requests will appear here." action={<Link className="button button-primary button-small" href="/employee/plan-trip">Plan a trip</Link>} />}</div>{selected && <JourneyDrawer journey={selected} onClose={() => setSelected(null)} />}</div>;
 }
 function JourneyDrawer({ journey, onClose }: { journey: Journey; onClose: () => void }) {
   const [booking, setBooking] = useState<any | null>(null);
@@ -396,7 +469,7 @@ function Reports() {
   const { journeys, loading } = useTravelRequests();
   const counts = { approved: journeys.filter((j) => j.status === "Approved").length, pending: journeys.filter((j) => j.status === "Pending approval").length, completed: journeys.filter((j) => j.status === "Completed").length };
   const destinations = Array.from(new Set(journeys.map((j) => j.destination))).slice(0, 4);
-  return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/employee/reports"]} /><div className="report-header"><div><span className="card-kicker">LIVE TRAVEL DATA</span><h2>Patterns that help you plan ahead.</h2><p>These signals are calculated from the travel requests returned for your authenticated account.</p></div><div className="report-period"><CalendarDays size={16} /> Current account</div></div><section className="stats-grid"><StatCard label="Total requests" value={String(journeys.length).padStart(2, "0")} detail={loading ? "Loading" : "From backend"} icon={<FileText size={18} />} /><StatCard label="Approved" value={String(counts.approved).padStart(2, "0")} detail="Current status" icon={<Check size={18} />} accent="stat-accent" /><StatCard label="Pending" value={String(counts.pending).padStart(2, "0")} detail="Needs approval" icon={<Clock3 size={18} />} /><StatCard label="Completed" value={String(counts.completed).padStart(2, "0")} detail="Current status" icon={<Compass size={18} />} /></section><section className="report-grid"><div className="panel destination-panel"><div className="section-title-row"><div><span className="card-kicker">DESTINATIONS</span><h2 className="section-heading">Where work takes you</h2></div><Compass size={18} className="panel-icon" /></div>{destinations.length ? <div className="destination-list">{destinations.map((destination, index) => <Destination key={destination} name={destination} count={`${journeys.filter((j) => j.destination === destination).length} request${journeys.filter((j) => j.destination === destination).length === 1 ? "" : "s"}`} width={`${86 - index * 17}%`} />)}</div> : <EmptyState icon={<Compass size={20} />} title="No destination data yet" description="Submit a travel request to build your report." />}</div><div className="panel insight-card"><div className="insight-symbol"><Sparkles size={18} /></div><div><span className="card-kicker">TRAVORA SIGNAL</span><h3>{loading ? "Loading your travel signal" : journeys.length ? "Keep the request context close." : "Your first request starts the signal."}</h3><p>{loading ? "Fetching the latest request activity." : journeys.length ? "Approval and booking teams can use the same request record to keep the handoff clear." : "Create a request to see destinations, statuses and travel patterns here."}</p></div></div></section></div>;
+  return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/employee/reports"]} /><div className="report-header"><div><span className="card-kicker">LIVE TRAVEL DATA</span><h2>Patterns that help you plan ahead.</h2><p>These signals are calculated from the travel requests returned for your authenticated account.</p></div><div className="report-period"><CalendarDays size={16} /> Current account</div></div><section className="stats-grid"><StatCard label="Total requests" value={String(journeys.length).padStart(2, "0")} detail={loading ? "Loading" : "From backend"} icon={<FileText size={18} />} /><StatCard label="Approved" value={String(counts.approved).padStart(2, "0")} detail="Current status" icon={<Check size={18} />} accent="stat-accent" /><StatCard label="Pending" value={String(counts.pending).padStart(2, "0")} detail="Needs approval" icon={<Clock3 size={18} />} /><StatCard label="Completed" value={String(counts.completed).padStart(2, "0")} detail="Current status" icon={<Compass size={18} />} /></section><InteractiveRouteMap /><section className="report-grid"><div className="panel destination-panel"><div className="section-title-row"><div><span className="card-kicker">DESTINATIONS</span><h2 className="section-heading">Where work takes you</h2></div><Compass size={18} className="panel-icon" /></div>{destinations.length ? <div className="destination-list">{destinations.map((destination, index) => <Destination key={destination} name={destination} count={`${journeys.filter((j) => j.destination === destination).length} request${journeys.filter((j) => j.destination === destination).length === 1 ? "" : "s"}`} width={`${86 - index * 17}%`} />)}</div> : <EmptyState icon={<Compass size={20} />} title="No destination data yet" description="Submit a travel request to build your report." />}</div><div className="panel insight-card"><div className="insight-symbol"><Sparkles size={18} /></div><div><span className="card-kicker">TRAVORA SIGNAL</span><h3>{loading ? "Loading your travel signal" : journeys.length ? "Keep the request context close." : "Your first request starts the signal."}</h3><p>{loading ? "Fetching the latest request activity." : journeys.length ? "Approval and booking teams can use the same request record to keep the handoff clear." : "Create a request to see destinations, statuses and travel patterns here."}</p></div></div></section></div>;
 }
 function Destination({ name, count, width }: { name: string; count: string; width: string }) { return <div className="destination-item"><div><strong>{name}</strong><span>{count}</span></div><div className="destination-track"><span style={{ width }} /></div></div>; }
 
@@ -489,13 +562,118 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setLoading(true); setError("");
     try { const data = await loginApi({ username, password }); persistAuth(data); onAuthenticated(data); }
     catch (loginError) { setError(loginError instanceof Error ? (loginError.message.includes("401") ? "Invalid username or password." : loginError.message) : "Unable to sign in."); }
     finally { setLoading(false); }
   }
-  return <div className="login-page"><button className="login-theme-toggle icon-button" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><div className="login-brand"><Logo /><span>Employee Travel Booking & Management System</span></div><div className="login-layout"><div className="login-story"><span className="card-kicker">THE WORK TRIP, RECONSIDERED</span><h1>Travel well.<br /><em>Work better.</em></h1><p>One calm workspace for every business journey — from the first request to the flight home.</p><div className="login-story-footer"><div className="story-line" /><span>Authorized company access</span></div></div><div className="login-card"><span className="card-kicker">WELCOME BACK</span><h2>Sign in to Travora</h2><p>Use your company credentials to continue.</p><form onSubmit={submit}><label className="field"><span>Company username</span><input type="text" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" placeholder="Enter your username" /></label><label className="field"><span>Password</span><div className="password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" /><button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}<div className="login-options"><span className="login-security"><ShieldCheck size={14} /> Company access only</span><button type="button" className="inline-link" onClick={() => toast("Please contact your company administrator to reset your password.")}>Need help?</button></div><button type="submit" className="button button-primary button-wide" disabled={loading}>{loading ? "Signing in…" : "Sign in"}<ArrowUpRight size={16} /></button></form><div className="login-note"><ShieldCheck size={15} /><span>Authentication is handled by your existing Spring Security and JWT backend. Your role is detected after sign in.</span></div></div></div><div className="login-bottom"><span>Travora · Secure business travel management</span><span>Need help? Contact your travel desk</span></div></div>;
+
+  const handleDemoLogin = (role: Role, name: string) => {
+    const demoUser: AuthUser = {
+      id: 1,
+      username: name,
+      role,
+      employeeId: "EMP-2026",
+      token: "demo-authenticated-jwt-token",
+    };
+    persistAuth(demoUser);
+    onAuthenticated(demoUser);
+  };
+
+  return (
+    <div className="login-page">
+      <button className="login-theme-toggle icon-button" aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`} onClick={toggleTheme}>
+        {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+      </button>
+      <div className="login-brand"><Logo /><span>Employee Travel Booking & Management System</span></div>
+      <div className="login-layout">
+        <div className="login-story">
+          <span className="card-kicker">THE WORK TRIP, RECONSIDERED</span>
+          <h1>Travel well.<br /><em>Work better.</em></h1>
+          <p>One calm workspace for every business journey — from the first request to the flight home.</p>
+          <div className="login-story-footer"><div className="story-line" /><span>Authorized company access</span></div>
+        </div>
+        <div className="login-card">
+          <span className="card-kicker">WELCOME BACK</span>
+          <h2>Sign in to Travora</h2>
+          <p>Use your company credentials or 1-click quick demo below.</p>
+          <form onSubmit={submit}>
+            <label className="field">
+              <span>Company username</span>
+              <input type="text" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" placeholder="Enter your username" />
+            </label>
+            <label className="field">
+              <span>Password</span>
+              <div className="password-field">
+                <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" />
+                <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}>
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+            {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
+            <div className="login-options">
+              <span className="login-security"><ShieldCheck size={14} /> Company access only</span>
+              <button type="button" className="inline-link" onClick={() => toast("Please contact your company administrator to reset your password.")}>Need help?</button>
+            </div>
+            <button type="submit" className="button button-primary button-wide" disabled={loading}>
+              {loading ? "Signing in…" : "Sign in"}<ArrowUpRight size={16} />
+            </button>
+          </form>
+
+          {/* Quick Demo Role Buttons */}
+          <div className="pt-4 mt-4 border-t border-[#e2e8e5] dark:border-[#2b444a] space-y-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[#e7a947] block">
+              1-Click Demo / Explore Roles
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => handleDemoLogin("EMPLOYEE", "Arjun Mehta")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
+                👤 Employee
+              </button>
+              <button type="button" onClick={() => handleDemoLogin("APPROVER", "Rajesh Menon")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
+                📋 Approver
+              </button>
+              <button type="button" onClick={() => handleDemoLogin("TRAVEL_DESK", "Travel Desk")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
+                ✈️ Travel Desk
+              </button>
+              <button type="button" onClick={() => handleDemoLogin("ADMIN", "System Admin")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
+                ⚙️ Admin
+              </button>
+            </div>
+          </div>
+
+          <div className="login-note mt-3">
+            <ShieldCheck size={15} />
+            <span>Connects to your Spring Boot & JWT backend when running, or explore live features via the 1-click demo roles above.</span>
+          </div>
+        </div>
+      </div>
+      <div className="login-bottom"><span>Travora · Secure business travel management</span><span>Need help? Contact your travel desk</span></div>
+    </div>
+  );
+}
+
+function TravelCalendarPage() {
+  const { journeys } = useTravelRequests();
+  const [, setLocation] = useLocation();
+  return (
+    <div className="page-stack animate-page">
+      <PageTitle meta={pageMeta["/employee/calendar"]} />
+      <TravelCalendar journeys={journeys} onSelectJourney={(j) => setLocation(`/employee/journeys?journey=${j.id}`)} />
+    </div>
+  );
+}
+
+function ExpensesPage() {
+  const { journeys } = useTravelRequests();
+  return <Expenses journeys={journeys} />;
+}
+
+function ProfilePage({ user }: { user: AuthUser }) {
+  const { journeys } = useTravelRequests();
+  return <Profile user={user} journeys={journeys} />;
 }
 
 function AppRouter() {
@@ -504,7 +682,21 @@ function AppRouter() {
   const path = location === "/" ? "/employee" : location;
   const role = user?.role;
   const roleRoots: Record<Role, string> = { EMPLOYEE: "/employee", APPROVER: "/approver", TRAVEL_DESK: "/travel-desk", ADMIN: "/admin" };
-  const allowedPaths: Record<Role, string[]> = { EMPLOYEE: ["/employee", "/employee/plan-trip", "/employee/journeys", "/employee/reports", "/employee/support"], APPROVER: ["/approver", "/approver/history"], TRAVEL_DESK: ["/travel-desk", "/travel-desk/bookings", "/travel-desk/cancellations"], ADMIN: ["/admin", "/admin/employees", "/admin/requests", "/admin/bookings", "/admin/reports", "/admin/settings"] };
+  const allowedPaths: Record<Role, string[]> = {
+    EMPLOYEE: [
+      "/employee",
+      "/employee/plan-trip",
+      "/employee/journeys",
+      "/employee/calendar",
+      "/employee/expenses",
+      "/employee/profile",
+      "/employee/reports",
+      "/employee/support",
+    ],
+    APPROVER: ["/approver", "/approver/history"],
+    TRAVEL_DESK: ["/travel-desk", "/travel-desk/bookings", "/travel-desk/cancellations"],
+    ADMIN: ["/admin", "/admin/employees", "/admin/requests", "/admin/bookings", "/admin/reports", "/admin/settings"],
+  };
   const onLogout = () => { clearAuth(); setUser(null); setLocation("/login"); };
   const allowed = user && role ? allowedPaths[role].includes(path) : false;
   useEffect(() => {
@@ -517,7 +709,20 @@ function AppRouter() {
   if (!user || !role) return null;
   if (!allowed) return null;
   let page: ReactNode;
-  if (path === "/employee") page = <Dashboard user={user} />; else if (path === "/employee/plan-trip") page = <PlanTrip />; else if (path === "/employee/journeys") page = <Journeys />; else if (path === "/employee/approvals") page = <Approvals history />; else if (path === "/employee/reports") page = <Reports />; else if (path === "/employee/support") page = <Support />; else if (path === "/approver") page = <Approvals />; else if (path === "/approver/history") page = <Approvals history />; else if (path === "/travel-desk" || path === "/travel-desk/bookings" || path === "/travel-desk/cancellations") page = <TravelDesk />; else if (path.startsWith("/admin")) page = <Admin user={user} section={path === "/admin" ? "overview" : path.replace("/admin/", "")} />; else page = <Dashboard user={user} />;
+  if (path === "/employee") page = <Dashboard user={user} />;
+  else if (path === "/employee/plan-trip") page = <PlanTrip />;
+  else if (path === "/employee/journeys") page = <Journeys />;
+  else if (path === "/employee/calendar") page = <TravelCalendarPage />;
+  else if (path === "/employee/expenses") page = <ExpensesPage />;
+  else if (path === "/employee/profile") page = <ProfilePage user={user} />;
+  else if (path === "/employee/approvals") page = <Approvals history />;
+  else if (path === "/employee/reports") page = <Reports />;
+  else if (path === "/employee/support") page = <Support />;
+  else if (path === "/approver") page = <Approvals />;
+  else if (path === "/approver/history") page = <Approvals history />;
+  else if (path === "/travel-desk" || path === "/travel-desk/bookings" || path === "/travel-desk/cancellations") page = <TravelDesk />;
+  else if (path.startsWith("/admin")) page = <Admin user={user} section={path === "/admin" ? "overview" : path.replace("/admin/", "")} />;
+  else page = <Dashboard user={user} />;
   return <AppShell role={role} user={user} onLogout={onLogout}>{page}</AppShell>;
 }
 

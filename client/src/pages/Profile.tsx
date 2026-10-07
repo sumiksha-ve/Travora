@@ -1,0 +1,323 @@
+import { useState, useEffect } from "react";
+import {
+  UserRound,
+  Mail,
+  Building2,
+  Phone,
+  Plane,
+  ShieldCheck,
+  Save,
+  CheckCircle2,
+  Compass,
+  FileText,
+  HeartHandshake,
+  Sparkles,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { AuthUser } from "../lib/api";
+import type { Journey, UserProfile } from "../types";
+
+export function Profile({ user, journeys = [] }: { user: AuthUser; journeys?: Journey[] }) {
+  const defaultProfile: UserProfile = {
+    id: String(user.id || "USR-2026"),
+    name: user.username || "Travora Traveler",
+    email: `${user.username?.toLowerCase().replace(/\s+/g, ".") || "employee"}@travora.internal`,
+    role: user.role,
+    employeeId: user.employeeId || "EMP-8849",
+    department: "Enterprise Solutions & Architecture",
+    designation: "Senior Lead Specialist",
+    phone: "+91 98765 43210",
+    officeLocation: "Bengaluru Technology Campus, India",
+    emergencyContact: {
+      name: "Priya Sharma",
+      relation: "Spouse",
+      phone: "+91 98765 01234",
+    },
+    travelPreferences: {
+      seatPreference: "Window",
+      mealPreference: "Vegetarian",
+      preferredAirlines: ["Air India", "Singapore Airlines", "Emirates"],
+      hotelLoyalty: "Marriott Bonvoy #8942-108",
+      frequentFlyerNo: "AI-FLYER-94812",
+    },
+  };
+
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    try {
+      const saved = localStorage.getItem(`travora_profile_${user.id || user.username}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return defaultProfile;
+  });
+
+  const [seat, setSeat] = useState(profile.travelPreferences.seatPreference);
+  const [meal, setMeal] = useState(profile.travelPreferences.mealPreference);
+  const [frequentFlyer, setFrequentFlyer] = useState(profile.travelPreferences.frequentFlyerNo || "");
+  const [hotelLoyalty, setHotelLoyalty] = useState(profile.travelPreferences.hotelLoyalty || "");
+  const [phone, setPhone] = useState(profile.phone);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const updated: UserProfile = {
+      ...profile,
+      phone,
+      travelPreferences: {
+        ...profile.travelPreferences,
+        seatPreference: seat as any,
+        mealPreference: meal as any,
+        frequentFlyerNo: frequentFlyer,
+        hotelLoyalty,
+      },
+    };
+
+    setProfile(updated);
+    localStorage.setItem(`travora_profile_${user.id || user.username}`, JSON.stringify(updated));
+    setSavedSuccess(true);
+    toast.success("Travel preferences updated successfully.");
+    setTimeout(() => setSavedSuccess(false), 3000);
+  };
+
+  const completedTrips = journeys.filter((j) => j.status === "Completed").length;
+
+  return (
+    <div className="page-stack animate-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Employee workspace</p>
+          <h1>Profile & Travel Preferences</h1>
+          <p className="page-description">
+            Manage your personal profile, frequent flyer perks, meal choices, and seating preferences.
+          </p>
+        </div>
+        <div className="heading-actions">
+          <span className="preview-chip">
+            <ShieldCheck size={13} /> Verified Corporate Account
+          </span>
+        </div>
+      </div>
+
+      {/* Hero Profile Banner */}
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-[#1f353d] to-[#29444c] text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-md border border-white/10">
+        <div className="flex items-center gap-5">
+          <div className="w-18 h-18 rounded-2xl bg-[#e7a947] text-[#1f353d] flex items-center justify-center text-2xl font-black shadow-lg">
+            {(user.username || "TV").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-2xl font-bold tracking-tight text-white">{profile.name}</h2>
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#e7a947]/20 text-[#e7a947] border border-[#e7a947]/40">
+                {profile.role}
+              </span>
+            </div>
+            <p className="text-sm text-[#98afaa]">
+              {profile.designation} · {profile.department}
+            </p>
+            <div className="flex flex-wrap items-center gap-4 text-xs text-[#dbe7e4] pt-1">
+              <span className="flex items-center gap-1.5">
+                <Building2 size={13} className="text-[#e7a947]" /> {profile.officeLocation}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Mail size={13} className="text-[#e7a947]" /> {profile.email}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex md:flex-col items-center md:items-end gap-3 shrink-0">
+          <div className="text-left md:text-right">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-[#98afaa] block">
+              Employee ID
+            </span>
+            <strong className="text-lg font-mono text-white">{profile.employeeId}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Travel Stats Quick Metrics */}
+      <section className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <span className="stat-icon"><Compass size={18} /></span>
+            <span className="stat-detail">Lifetime journeys</span>
+          </div>
+          <strong className="stat-value">{journeys.length || 6}</strong>
+          <span className="stat-label">Trips coordinated through Travora</span>
+        </div>
+
+        <div className="stat-card stat-accent">
+          <div className="stat-card-top">
+            <span className="stat-icon"><CheckCircle2 size={18} /></span>
+            <span className="stat-detail">Completed journeys</span>
+          </div>
+          <strong className="stat-value">{completedTrips || 4}</strong>
+          <span className="stat-label">Returned with zero policy flags</span>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <span className="stat-icon"><Sparkles size={18} /></span>
+            <span className="stat-detail">Carbon Footprint</span>
+          </div>
+          <strong className="stat-value">1.4 tons</strong>
+          <span className="stat-label">100% corporate ESG offset</span>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-card-top">
+            <span className="stat-icon"><FileText size={18} /></span>
+            <span className="stat-detail">Corporate Tier</span>
+          </div>
+          <strong className="stat-value">Executive</strong>
+          <span className="stat-label">Priority desk & airport fast-track</span>
+        </div>
+      </section>
+
+      {/* Profile Edit Form & Preference Panels */}
+      <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Travel Preferences */}
+          <div className="panel p-6 space-y-5">
+            <div className="section-title-row">
+              <div>
+                <span className="card-kicker">PERSONALIZED FLIGHT SETTINGS</span>
+                <h2 className="section-heading">Travel Preferences</h2>
+              </div>
+              <Plane size={18} className="panel-icon text-[#398064]" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="field">
+                <span>Preferred Seating</span>
+                <select value={seat} onChange={(e) => setSeat(e.target.value as any)}>
+                  <option value="Window">Window Seat</option>
+                  <option value="Aisle">Aisle Seat</option>
+                  <option value="Middle">Middle Seat</option>
+                  <option value="No preference">No preference</option>
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Dietary / Meal Preference</span>
+                <select value={meal} onChange={(e) => setMeal(e.target.value as any)}>
+                  <option value="Vegetarian">Vegetarian (Asian / Indian)</option>
+                  <option value="Non-Vegetarian">Non-Vegetarian (Standard)</option>
+                  <option value="Vegan">Strict Vegan</option>
+                  <option value="Gluten-Free">Gluten-Free</option>
+                  <option value="Standard">Standard Airline Meal</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="field">
+                <span>Frequent Flyer Number</span>
+                <input
+                  value={frequentFlyer}
+                  onChange={(e) => setFrequentFlyer(e.target.value)}
+                  placeholder="e.g. AI-982312 or SQ-49219"
+                />
+              </label>
+
+              <label className="field">
+                <span>Hotel Loyalty Program ID</span>
+                <input
+                  value={hotelLoyalty}
+                  onChange={(e) => setHotelLoyalty(e.target.value)}
+                  placeholder="e.g. Marriott Bonvoy / Taj InnerCircle"
+                />
+              </label>
+            </div>
+
+            <label className="field">
+              <span>Primary Contact Phone</span>
+              <div className="input-with-icon">
+                <Phone size={16} />
+                <input
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+            </label>
+
+            <div className="flex items-center justify-between pt-2">
+              {savedSuccess ? (
+                <span className="text-xs text-[#398064] flex items-center gap-1.5 font-semibold">
+                  <CheckCircle2 size={15} /> Changes saved to your profile
+                </span>
+              ) : (
+                <span className="text-xs text-[#839099]">
+                  Travel desk will automatically apply these preferences during booking.
+                </span>
+              )}
+              <button type="submit" className="button button-primary flex items-center gap-2">
+                <Save size={16} /> Save Preferences
+              </button>
+            </div>
+          </div>
+
+          {/* Emergency Contact */}
+          <div className="panel p-6 space-y-4">
+            <div className="section-title-row">
+              <div>
+                <span className="card-kicker">SAFETY & DUTY OF CARE</span>
+                <h2 className="section-heading">Emergency Contact</h2>
+              </div>
+              <HeartHandshake size={18} className="panel-icon text-[#b15b53]" />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="admin-request-detail">
+                <small>Contact Person</small>
+                <strong>{profile.emergencyContact.name}</strong>
+              </div>
+              <div className="admin-request-detail">
+                <small>Relationship</small>
+                <strong>{profile.emergencyContact.relation}</strong>
+              </div>
+              <div className="admin-request-detail">
+                <small>Emergency Phone</small>
+                <strong>{profile.emergencyContact.phone}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar Info & Corporate Policy */}
+        <aside className="space-y-6">
+          <div className="aside-card aside-dark p-6 space-y-4">
+            <div className="flex items-center gap-2 text-[#e7a947]">
+              <ShieldCheck size={20} />
+              <h3 className="font-bold text-white text-base">Duty of Care Active</h3>
+            </div>
+            <p className="text-xs text-[#dbe7e4] leading-relaxed">
+              Travora automatically registers all confirmed bookings with our 24/7 Corporate Medical & Travel Assistance helpline (International SOS).
+            </p>
+            <div className="pt-2 border-t border-white/10 text-[11px] text-[#98afaa]">
+              24/7 Hotline: +1 (800) 528-7474
+            </div>
+          </div>
+
+          <div className="panel p-6 space-y-3">
+            <span className="card-kicker">TRAVEL DOCUMENT STATUS</span>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between py-1.5 border-b border-[#e2e8e5] dark:border-[#2b444a]">
+                <span className="text-[#839099]">Passport Validity:</span>
+                <strong className="text-[#398064]">Valid (Exp: Nov 2031)</strong>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-[#e2e8e5] dark:border-[#2b444a]">
+                <span className="text-[#839099]">US B1/B2 Visa:</span>
+                <strong className="text-[#398064]">Active (Exp: 2029)</strong>
+              </div>
+              <div className="flex items-center justify-between py-1.5 border-b border-[#e2e8e5] dark:border-[#2b444a]">
+                <span className="text-[#839099]">Schengen Visa:</span>
+                <strong className="text-[#e7a947]">Eligible for auto-sponsor</strong>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </form>
+    </div>
+  );
+}
