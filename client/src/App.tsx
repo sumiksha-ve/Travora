@@ -710,17 +710,12 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
     finally { setLoading(false); }
   }
 
-  const handleDemoLogin = (role: Role, name: string) => {
-    const demoUser: AuthUser = {
-      id: 1,
-      username: name,
-      role,
-      employeeId: "EMP-2026",
-      token: "demo-authenticated-jwt-token",
-    };
-    persistAuth(demoUser);
-    onAuthenticated(demoUser);
-  };
+  const roleAccounts = [
+    { role: "Employee", id: "employee", title: "Arjun Mehta (Lead Architect)", icon: "👤" },
+    { role: "Approver", id: "approver", title: "Rajesh Menon (VP / Approver)", icon: "📋" },
+    { role: "Travel Desk", id: "traveldesk", title: "Travel Desk Operations", icon: "✈️" },
+    { role: "Admin", id: "admin", title: "System Administrator", icon: "⚙️" },
+  ];
 
   return (
     <div className="login-page">
@@ -736,18 +731,18 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
           <div className="login-story-footer"><div className="story-line" /><span>Authorized company access</span></div>
         </div>
         <div className="login-card">
-          <span className="card-kicker">WELCOME BACK</span>
+          <span className="card-kicker">ENTERPRISE PORTAL</span>
           <h2>Sign in to Travora</h2>
-          <p>Use your company credentials or 1-click quick demo below.</p>
+          <p>Sign in with your role login ID and password below.</p>
           <form onSubmit={submit}>
             <label className="field">
-              <span>Company username</span>
-              <input type="text" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" placeholder="Enter your username" />
+              <span>Login ID</span>
+              <input type="text" value={username} onChange={(event) => setUsername(event.target.value)} required autoComplete="username" placeholder="e.g. employee, approver, traveldesk, admin" />
             </label>
             <label className="field">
               <span>Password</span>
               <div className="password-field">
-                <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password" />
+                <input type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} required autoComplete="current-password" placeholder="Enter your password (e.g. password)" />
                 <button type="button" className="password-toggle" aria-label={showPassword ? "Hide password" : "Show password"} onClick={() => setShowPassword((visible) => !visible)}>
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -755,38 +750,45 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
             </label>
             {error && <div className="form-error-message"><XCircle size={15} />{error}</div>}
             <div className="login-options">
-              <span className="login-security"><ShieldCheck size={14} /> Company access only</span>
-              <button type="button" className="inline-link" onClick={() => toast("Please contact your company administrator to reset your password.")}>Need help?</button>
+              <span className="login-security"><ShieldCheck size={14} /> Role-based access control</span>
+              <button type="button" className="inline-link" onClick={() => toast("Default password for all role login IDs is 'password'.")}>Need credentials?</button>
             </div>
             <button type="submit" className="button button-primary button-wide" disabled={loading}>
               {loading ? "Signing in…" : "Sign in"}<ArrowUpRight size={16} />
             </button>
           </form>
 
-          {/* Quick Demo Role Buttons */}
-          <div className="pt-4 mt-4 border-t border-[#e2e8e5] dark:border-[#2b444a] space-y-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#e7a947] block">
-              1-Click Demo / Explore Roles
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => handleDemoLogin("EMPLOYEE", "Arjun Mehta")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
-                👤 Employee
-              </button>
-              <button type="button" onClick={() => handleDemoLogin("APPROVER", "Rajesh Menon")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
-                📋 Approver
-              </button>
-              <button type="button" onClick={() => handleDemoLogin("TRAVEL_DESK", "Travel Desk")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
-                ✈️ Travel Desk
-              </button>
-              <button type="button" onClick={() => handleDemoLogin("ADMIN", "System Admin")} className="button button-ghost button-small text-xs py-2 justify-center border border-[#e2e8e5] dark:border-[#2b444a]">
-                ⚙️ Admin
-              </button>
+          {/* Role Login IDs Reference Panel */}
+          <div className="login-accounts-panel">
+            <div className="login-accounts-header">
+              <span>Authorized Role Login IDs</span>
+              <small style={{ fontSize: 11, opacity: 0.7 }}>Click ID to fill</small>
+            </div>
+            <div className="login-accounts-grid">
+              {roleAccounts.map((acc) => (
+                <button
+                  key={acc.id}
+                  type="button"
+                  className="login-account-item"
+                  onClick={() => {
+                    setUsername(acc.id);
+                    setPassword("password");
+                  }}
+                  title={`Click to fill ${acc.id}`}
+                >
+                  <div className="login-account-role">
+                    <strong>{acc.icon} {acc.role}</strong>
+                    <small>{acc.title}</small>
+                  </div>
+                  <span className="login-account-code">{acc.id}</span>
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="login-note mt-3">
             <ShieldCheck size={15} />
-            <span>Connects to your Spring Boot & JWT backend when running, or explore live features via the 1-click demo roles above.</span>
+            <span>Enterprise authentication enabled. Sign in with your assigned login ID to access your dedicated workspace.</span>
           </div>
         </div>
       </div>

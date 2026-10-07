@@ -257,6 +257,76 @@
   border-color: rgba(248, 113, 113, 0.3);
 }
 
+.login-accounts-panel {
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.login-accounts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.login-accounts-header span {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+.login-accounts-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-account-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  width: 100%;
+}
+.login-account-item:hover {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+.login-account-role {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.login-account-role strong {
+  font-size: 12px;
+  color: var(--ink);
+}
+.login-account-role small {
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+.login-account-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(84, 123, 145, 0.12);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--blue);
+  font-weight: 700;
+}
+.dark .login-account-code {
+  background: rgba(138, 180, 248, 0.15);
+  color: #8ab4f8;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
