@@ -161,49 +161,199 @@ export function persistAuth(user: AuthUser) {
   window.localStorage.setItem("travora_user", JSON.stringify({ id: user.id, username: user.username, role: user.role, employeeId: user.employeeId ?? null }));
 }
 
+const LOCAL_REQUESTS_KEY = "travora_local_requests";
+const LOCAL_BOOKINGS_KEY = "travora_local_bookings";
+
+export function getLocalRequests(): any[] {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_REQUESTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to load local requests", e);
+  }
+  return DEMO_REQUESTS;
+}
+
+export function saveLocalRequests(requests: any[]) {
+  try {
+    window.localStorage.setItem(LOCAL_REQUESTS_KEY, JSON.stringify(requests));
+  } catch (e) {
+    console.warn("Failed to save local requests", e);
+  }
+}
+
+export function getLocalBookings(): any[] {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_BOOKINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to load local bookings", e);
+  }
+  return DEMO_BOOKINGS;
+}
+
+export function saveLocalBookings(bookings: any[]) {
+  try {
+    window.localStorage.setItem(LOCAL_BOOKINGS_KEY, JSON.stringify(bookings));
+  } catch (e) {
+    console.warn("Failed to save local bookings", e);
+  }
+}
+
 export const travelRequestsApi = {
   list: async () => {
-    try { return await apiRequest<any[]>("/api/travel-requests"); }
-    catch { return DEMO_REQUESTS; }
+    try {
+      const data = await apiRequest<any[]>("/api/travel-requests");
+      if (Array.isArray(data) && data.length > 0) return data;
+      return getLocalRequests();
+    } catch {
+      return getLocalRequests();
+    }
   },
   get: async (id: string) => {
-    try { return await apiRequest(`/api/travel-requests/${id}`); }
-    catch { return DEMO_REQUESTS.find(r => r.id === id) || DEMO_REQUESTS[0]; }
+    try {
+      return await apiRequest(`/api/travel-requests/${id}`);
+    } catch {
+      return getLocalRequests().find((r) => String(r.id) === String(id)) || DEMO_REQUESTS[0];
+    }
   },
   create: async (payload: unknown) => {
-    try { return await apiRequest("/api/travel-requests", { method: "POST", body: JSON.stringify(payload) }); }
-    catch { return { id: `TR-${Math.floor(Math.random() * 9000 + 1000)}`, ...(payload as object), status: "PENDING" }; }
+    const user = getStoredUser();
+    const newReq = {
+      id: `TR-${Math.floor(Math.random() * 9000 + 1000)}`,
+      ...(payload as object),
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      employee: {
+        id: user?.id || 1,
+        name: user?.username || "Arjun Mehta",
+        employeeId: user?.employeeId || "EMP-2026",
+        department: "Engineering",
+        designation: "Lead Architect",
+      },
+    };
+    const current = getLocalRequests();
+    saveLocalRequests([newReq, ...current]);
+    try {
+      await apiRequest("/api/travel-requests", { method: "POST", body: JSON.stringify(payload) });
+    } catch {
+      // Backend offline fallback handled by localStorage
+    }
+    return newReq;
   },
   approve: async (id: string, approverName: string, comment = "") => {
-    try { return await apiRequest(`/api/travel-requests/${id}/approve`, { method: "PATCH", body: JSON.stringify({ approverName, comment }) }); }
-    catch { return { id, status: "APPROVED", approverName, comment }; }
+    const current = getLocalRequests();
+    const updated = current.map((r) =>
+      String(r.id) === String(id)
+        ? { ...r, status: "APPROVED", approverName, approvalComment: comment, approvalDate: new Date().toISOString() }
+        : r
+    );
+    saveLocalRequests(updated);
+    try {
+      await apiRequest(`/api/travel-requests/${id}/approve`, {
+        method: "PATCH",
+        body: JSON.stringify({ approverName, comment }),
+      });
+    } catch {
+      // Backend offline fallback
+    }
+    return { id, status: "APPROVED", approverName, comment };
   },
   reject: async (id: string, approverName: string, comment = "") => {
-    try { return await apiRequest(`/api/travel-requests/${id}/reject`, { method: "PATCH", body: JSON.stringify({ approverName, comment }) }); }
-    catch { return { id, status: "REJECTED", approverName, comment }; }
+    const current = getLocalRequests();
+    const updated = current.map((r) =>
+      String(r.id) === String(id)
+        ? { ...r, status: "REJECTED", approverName, approvalComment: comment, rejectionDate: new Date().toISOString() }
+        : r
+    );
+    saveLocalRequests(updated);
+    try {
+      await apiRequest(`/api/travel-requests/${id}/reject`, {
+        method: "PATCH",
+        body: JSON.stringify({ approverName, comment }),
+      });
+    } catch {
+      // Backend offline fallback
+    }
+    return { id, status: "REJECTED", approverName, comment };
   },
 };
 
 export const bookingsApi = {
   list: async () => {
-    try { return await apiRequest<any[]>("/api/bookings"); }
-    catch { return DEMO_BOOKINGS; }
+    try {
+      const data = await apiRequest<any[]>("/api/bookings");
+      if (Array.isArray(data) && data.length > 0) return data;
+      return getLocalBookings();
+    } catch {
+      return getLocalBookings();
+    }
   },
   byTravelRequest: async (id: string) => {
-    try { return await apiRequest(`/api/bookings/travel-request/${id}`); }
-    catch { return DEMO_BOOKINGS.filter(b => String(b.travelRequest.id) === String(id)); }
+    try {
+      const data = await apiRequest(`/api/bookings/travel-request/${id}`);
+      if (data && (!Array.isArray(data) || data.length > 0)) return data;
+      return getLocalBookings().filter((b) => String(b.travelRequest?.id) === String(id));
+    } catch {
+      return getLocalBookings().filter((b) => String(b.travelRequest?.id) === String(id));
+    }
   },
-  create: async (payload: unknown) => {
-    try { return await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload) }); }
-    catch { return { id: `BK-${Math.floor(Math.random() * 900 + 100)}`, ...(payload as object) }; }
+  create: async (payload: any) => {
+    const reqId = payload.travelRequest?.id;
+    const req = getLocalRequests().find((r) => String(r.id) === String(reqId)) || { id: reqId };
+    const newBooking = {
+      id: `BK-${Math.floor(Math.random() * 900 + 100)}`,
+      ...payload,
+      travelRequest: req,
+      bookedAt: new Date().toISOString(),
+      cancelled: false,
+    };
+    const currentBookings = getLocalBookings();
+    saveLocalBookings([newBooking, ...currentBookings]);
+
+    // Update travel request status to BOOKED
+    const currentReqs = getLocalRequests();
+    const updatedReqs = currentReqs.map((r) =>
+      String(r.id) === String(reqId) ? { ...r, status: "BOOKED" } : r
+    );
+    saveLocalRequests(updatedReqs);
+
+    try {
+      await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload) });
+    } catch {
+      // Backend offline fallback
+    }
+    return newBooking;
   },
-  update: async (id: string, payload: unknown) => {
-    try { return await apiRequest(`/api/bookings/${id}`, { method: "PUT", body: JSON.stringify(payload) }); }
-    catch { return { id, ...(payload as object) }; }
+  update: async (id: string, payload: any) => {
+    const current = getLocalBookings();
+    const updated = current.map((b) => (String(b.id) === String(id) ? { ...b, ...payload } : b));
+    saveLocalBookings(updated);
+    try {
+      await apiRequest(`/api/bookings/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+    } catch {
+      // Backend offline fallback
+    }
+    return { id, ...payload };
   },
   cancel: async (id: string, reason: string, cancellationCharge = 0) => {
-    try { return await apiRequest(`/api/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}&cancellationCharge=${cancellationCharge}`, { method: "PUT" }); }
-    catch { return { id, cancelled: true, cancellationReason: reason, cancellationCharge }; }
+    const current = getLocalBookings();
+    const updated = current.map((b) =>
+      String(b.id) === String(id) ? { ...b, cancelled: true, cancellationReason: reason, cancellationCharge } : b
+    );
+    saveLocalBookings(updated);
+    try {
+      await apiRequest(`/api/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}&cancellationCharge=${cancellationCharge}`, { method: "PUT" });
+    } catch {
+      // Backend offline fallback
+    }
+    return { id, cancelled: true, cancellationReason: reason, cancellationCharge };
   },
 };
 

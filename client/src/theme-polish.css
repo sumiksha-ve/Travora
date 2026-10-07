@@ -108,6 +108,155 @@
 .dark input[type="checkbox"], .dark input[type="radio"] { accent-color: var(--green); }
 .dark ::selection { color: var(--ink); background: #42675c; }
 
+/* Approval Boxes & Ticket Attachment Styles */
+.approver-box-approved {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(57, 128, 100, 0.12);
+  border: 1px solid rgba(57, 128, 100, 0.35);
+  color: var(--green);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 12px 0;
+}
+.dark .approver-box-approved {
+  background: rgba(57, 128, 100, 0.18);
+  border-color: rgba(110, 231, 183, 0.35);
+  color: #6ee7b7;
+}
+
+.approver-box-pending {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(231, 169, 71, 0.12);
+  border: 1px solid rgba(231, 169, 71, 0.35);
+  color: #b47e24;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 12px 0;
+}
+.dark .approver-box-pending {
+  background: rgba(231, 169, 71, 0.16);
+  border-color: rgba(252, 211, 77, 0.35);
+  color: #fcd34d;
+}
+
+.approval-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.approval-pill.approved {
+  background: rgba(57, 128, 100, 0.14);
+  color: var(--green);
+  border: 1px solid rgba(57, 128, 100, 0.3);
+}
+.dark .approval-pill.approved {
+  color: #6ee7b7;
+  border-color: rgba(110, 231, 183, 0.3);
+}
+.approval-pill.pending {
+  background: rgba(231, 169, 71, 0.14);
+  color: #b47e24;
+  border: 1px solid rgba(231, 169, 71, 0.3);
+}
+.dark .approval-pill.pending {
+  color: #fcd34d;
+  border-color: rgba(252, 211, 77, 0.3);
+}
+.approval-pill.booked {
+  background: rgba(84, 123, 145, 0.14);
+  color: var(--blue);
+  border: 1px solid rgba(84, 123, 145, 0.3);
+}
+.dark .approval-pill.booked {
+  color: #8ab4f8;
+  border-color: rgba(138, 180, 248, 0.3);
+}
+
+.ticket-attachment-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+.ticket-attachment-preview {
+  max-height: 180px;
+  width: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+.ticket-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #edf5f1;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 600;
+}
+.dark .ticket-badge {
+  background: #203638;
+  color: #6ee7b7;
+}
+
+.ticket-upload-box {
+  border: 2px dashed rgba(131, 144, 153, 0.35);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.ticket-upload-box:hover {
+  border-color: var(--gold);
+  background: rgba(231, 169, 71, 0.05);
+}
+.ticket-file-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.ticket-doc-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  color: inherit;
+}
+.dark .ticket-doc-card {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
