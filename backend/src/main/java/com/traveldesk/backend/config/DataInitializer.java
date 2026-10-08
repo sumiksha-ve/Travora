@@ -3,6 +3,8 @@ package com.traveldesk.backend.config;
 import com.traveldesk.backend.auth.Role;
 import com.traveldesk.backend.auth.User;
 import com.traveldesk.backend.auth.UserRepository;
+import com.traveldesk.backend.employee.Employee;
+import com.traveldesk.backend.employee.EmployeeRepository;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
@@ -10,56 +12,107 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.beans.factory.annotation.Value;
 
+import java.util.List;
+
 @Configuration
 public class DataInitializer {
+
+    private record SeedEmployee(String empNumber, String fullName, String department, String designation) {}
+
+    private static final List<SeedEmployee> SEED_EMPLOYEES = List.of(
+            new SeedEmployee("AGR0001", "Suresh Babu Dangeti", "Petroleum Operations", "Executive"),
+            new SeedEmployee("AGR0003", "Ganesh Kakarla", "Site Operations", "Site Engineer"),
+            new SeedEmployee("AGR0007", "Anil Kukreja", "Operations", "Manager"),
+            new SeedEmployee("AGR0009", "Ramana M", "Operations", "Operations Executive"),
+            new SeedEmployee("MISPL0001", "Umamaheswari Yandapalli", "Corporate Management", "Director"),
+            new SeedEmployee("MISPL0002", "Kalyan Swaroop Yandapalli", "Executive Management", "Managing Director"),
+            new SeedEmployee("MISPL0003", "Himani Agarwal", "Finance & Accounts", "Finance Manager"),
+            new SeedEmployee("MISPL0007", "Sirisha Vegaraju", "Administration", "Executive Admin"),
+            new SeedEmployee("MISPL0014", "Vijaya Kumar Bgam", "Project Engineering", "Senior Project Engineer"),
+            new SeedEmployee("MISPL0016", "P Satheesh", "Field Engineering", "Project Lead"),
+            new SeedEmployee("MISPL0020", "Satya Prasad B", "Procurement", "Procurement Manager"),
+            new SeedEmployee("MISPL0027", "M Murali Dhara Reddy", "Infrastructure Planning", "General Manager"),
+            new SeedEmployee("MISPL0130", "Deena Raju Karra", "Commercial & Contracts", "Commercial Manager"),
+            new SeedEmployee("MISPL0164", "D Vasantha Lakshmi", "Human Resources", "HR Head"),
+            new SeedEmployee("MISPL0275", "Sulamangalam Dinesh Kumar", "Quality Assurance", "QA/QC Lead"),
+            new SeedEmployee("MISPL0333", "Mohan Jagatha", "Logistics & Supply", "Supply Chain Executive"),
+            new SeedEmployee("MISPL0372", "Vidyasagar Gorantala", "Civil & Structural", "Structural Engineer"),
+            new SeedEmployee("MISPL0387", "Thenmozhi S", "Design & Drafting", "Senior Design Engineer"),
+            new SeedEmployee("MISPL0402", "G Yathish Sai Krishna Posi", "Instrumentation", "Instrumentation Engineer"),
+            new SeedEmployee("MISPL0409", "Ravi Raghavendra Durga Prasad K", "Electrical & Instrumentation", "Project Manager"),
+            new SeedEmployee("MISPL0415", "Kranthi Bharkam", "Mechanical Systems", "Mechanical Engineer"),
+            new SeedEmployee("MISPL0423", "Rammohan Gubbala", "Safety & HSE", "HSE Officer"),
+            new SeedEmployee("MISPL0429", "Uppu Durga Rao", "Piping Engineering", "Piping Lead"),
+            new SeedEmployee("MISPL0430", "Malaya Kumar", "Planning & Controls", "Planning Engineer"),
+            new SeedEmployee("MISPL0440", "Dileep Kumar Gode", "Maintenance & Reliability", "Site Supervisor"),
+            new SeedEmployee("MISPL0466", "Panthangi Shashidhar", "Operations Coordination", "Operations Lead"),
+            new SeedEmployee("MISPL0485", "Sumanth Krishna Gaddam", "Technology & Systems", "Systems Engineer")
+    );
 
     @Bean
     CommandLineRunner initializeUsers(
             UserRepository userRepository,
+            EmployeeRepository employeeRepository,
             PasswordEncoder passwordEncoder,
-            @Value("${TRAVORA_ADMIN_USERNAME:}") String adminUsername,
-            @Value("${TRAVORA_ADMIN_PASSWORD:}") String adminPassword
+            @Value("${TRAVORA_ADMIN_USERNAME:admin}") String adminUsername,
+            @Value("${TRAVORA_ADMIN_PASSWORD:password}") String adminPassword
     ) {
         return args -> {
-
-            if (adminUsername == null || adminUsername.isBlank()
-                    || adminPassword == null || adminPassword.isBlank()) {
-                System.out.println("Admin bootstrap skipped: TRAVORA_ADMIN_USERNAME and TRAVORA_ADMIN_PASSWORD are not configured.");
-                return;
+            // 1. Seed or synchronize ADMIN
+            if (adminUsername != null && !adminUsername.isBlank()) {
+                User admin = userRepository.findByUsername(adminUsername).orElse(null);
+                if (admin == null) {
+                    admin = new User();
+                    admin.setUsername(adminUsername);
+                    admin.setPassword(passwordEncoder.encode(adminPassword));
+                    admin.setRole(Role.ADMIN);
+                    admin.setActive(true);
+                    userRepository.save(admin);
+                }
             }
 
-            User admin = userRepository
-                    .findByUsername(adminUsername)
-                    .orElse(null);
+            // 2. Seed TRAVEL DESK: Employee ID 123456, Password: mahathi
+            if (!userRepository.existsByUsername("123456")) {
+                User desk = new User();
+                desk.setUsername("123456");
+                desk.setPassword(passwordEncoder.encode("mahathi"));
+                desk.setRole(Role.TRAVEL_DESK);
+                desk.setEmployeeId("123456");
+                desk.setActive(true);
+                userRepository.save(desk);
+            }
 
-            if (admin == null) {
+            // 3. Seed APPROVER: Employee ID 654321, Password: mahathi1
+            if (!userRepository.existsByUsername("654321")) {
+                User approver = new User();
+                approver.setUsername("654321");
+                approver.setPassword(passwordEncoder.encode("mahathi1"));
+                approver.setRole(Role.APPROVER);
+                approver.setEmployeeId("654321");
+                approver.setActive(true);
+                userRepository.save(approver);
+            }
 
-                admin = new User();
+            // 4. Seed 27 EMPLOYEES: Login ID = employeeNumber, Password = employeeNumber
+            for (SeedEmployee se : SEED_EMPLOYEES) {
+                if (employeeRepository.findByEmployeeId(se.empNumber).isEmpty()) {
+                    Employee emp = new Employee();
+                    emp.setEmployeeId(se.empNumber);
+                    emp.setName(se.fullName);
+                    emp.setDepartment(se.department);
+                    emp.setDesignation(se.designation);
+                    employeeRepository.save(emp);
+                }
 
-                admin.setUsername(adminUsername);
-                admin.setPassword(
-                        passwordEncoder.encode(adminPassword)
-                );
-                admin.setRole(Role.ADMIN);
-                admin.setActive(true);
-
-                userRepository.save(admin);
-
-                System.out.println("Configured ADMIN bootstrap account created: " + adminUsername);
-
-            } else {
-
-                admin.setPassword(
-                        passwordEncoder.encode(adminPassword)
-                );
-
-                admin.setRole(Role.ADMIN);
-                admin.setActive(true);
-                admin.setEmployeeId(null);
-
-                userRepository.save(admin);
-
-                System.out.println("Configured ADMIN bootstrap account synchronized: " + adminUsername);
+                if (!userRepository.existsByUsername(se.empNumber)) {
+                    User u = new User();
+                    u.setUsername(se.empNumber);
+                    u.setPassword(passwordEncoder.encode(se.empNumber));
+                    u.setRole(Role.EMPLOYEE);
+                    u.setEmployeeId(se.empNumber);
+                    u.setActive(true);
+                    userRepository.save(u);
+                }
             }
         };
     }

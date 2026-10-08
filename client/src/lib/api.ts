@@ -79,11 +79,340 @@ export const DEMO_BOOKINGS = [
   },
 ];
 
+export type EmployeeAccount = {
+  id: number;
+  employeeNumber: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  displayName: string;
+  fullName: string;
+  workEmail: string;
+  department: string;
+  designation: string;
+};
+
+export const REGISTERED_EMPLOYEES: EmployeeAccount[] = [
+  {
+    id: 101,
+    employeeNumber: "AGR0001",
+    firstName: "Suresh Babu",
+    lastName: "Dangeti",
+    displayName: "Suresh Babu Dangeti",
+    fullName: "Suresh Babu Dangeti",
+    workEmail: "suresh@agrpetro.com",
+    department: "Petroleum Operations",
+    designation: "Executive",
+  },
+  {
+    id: 102,
+    employeeNumber: "AGR0003",
+    firstName: "Ganesh",
+    lastName: "Kakarla",
+    displayName: "Ganesh Kakarla",
+    fullName: "Ganesh Kakarla",
+    workEmail: "site.er4@agrpetro.com",
+    department: "Site Operations",
+    designation: "Site Engineer",
+  },
+  {
+    id: 103,
+    employeeNumber: "AGR0007",
+    firstName: "Anil",
+    lastName: "Kukreja",
+    displayName: "Anil Kukreja",
+    fullName: "Anil Kukreja",
+    workEmail: "anil.kukreja@agrpetro.com",
+    department: "Operations",
+    designation: "Manager",
+  },
+  {
+    id: 104,
+    employeeNumber: "AGR0009",
+    firstName: "Ramana",
+    lastName: "M",
+    displayName: "Ramana M",
+    fullName: "Ramana M",
+    workEmail: "sureshbabu506@gmail.com",
+    department: "Operations",
+    designation: "Operations Executive",
+  },
+  {
+    id: 105,
+    employeeNumber: "MISPL0001",
+    firstName: "Umamaheswari",
+    lastName: "Yandapalli",
+    displayName: "Umamaheswari Yandapalli",
+    fullName: "Umamaheswari Yandapalli",
+    workEmail: "umamaheswari@gmail.com",
+    department: "Corporate Management",
+    designation: "Director",
+  },
+  {
+    id: 106,
+    employeeNumber: "MISPL0002",
+    firstName: "Kalyan",
+    middleName: "Swaroop",
+    lastName: "Yandapalli",
+    displayName: "YKS",
+    fullName: "Kalyan Swaroop Yandapalli",
+    workEmail: "yks@mahathiinfra.com",
+    department: "Executive Management",
+    designation: "Managing Director",
+  },
+  {
+    id: 107,
+    employeeNumber: "MISPL0003",
+    firstName: "Himani",
+    lastName: "Agarwal",
+    displayName: "Himani Agarwal",
+    fullName: "Himani Agarwal",
+    workEmail: "himani.ag@mahathiinfra.com",
+    department: "Finance & Accounts",
+    designation: "Finance Manager",
+  },
+  {
+    id: 108,
+    employeeNumber: "MISPL0007",
+    firstName: "Sirisha",
+    lastName: "Vegaraju",
+    displayName: "Sirisha Vegaraju",
+    fullName: "Sirisha Vegaraju",
+    workEmail: "sirisha@mahathiinfra.com",
+    department: "Administration",
+    designation: "Executive Admin",
+  },
+  {
+    id: 109,
+    employeeNumber: "MISPL0014",
+    firstName: "Vijaya Kumar",
+    lastName: "Bgam",
+    displayName: "Bagam Vijaya Kumar",
+    fullName: "Vijaya Kumar Bgam",
+    workEmail: "kumar.bv@mahathiinfra.com",
+    department: "Project Engineering",
+    designation: "Senior Project Engineer",
+  },
+  {
+    id: 110,
+    employeeNumber: "MISPL0016",
+    firstName: "P",
+    lastName: "Satheesh",
+    displayName: "P Satheesh",
+    fullName: "P Satheesh",
+    workEmail: "satheesh@mahathiinfra.com",
+    department: "Field Engineering",
+    designation: "Project Lead",
+  },
+  {
+    id: 111,
+    employeeNumber: "MISPL0020",
+    firstName: "Satya",
+    middleName: "Prasad",
+    lastName: "B",
+    displayName: "B Satya Prasad",
+    fullName: "Satya Prasad B",
+    workEmail: "satya.prasad@mahathiinfra.com",
+    department: "Procurement",
+    designation: "Procurement Manager",
+  },
+  {
+    id: 112,
+    employeeNumber: "MISPL0027",
+    firstName: "M Murali",
+    middleName: "Dhara",
+    lastName: "Reddy",
+    displayName: "M Murali Dhara Reddy",
+    fullName: "M Murali Dhara Reddy",
+    workEmail: "murali.reddy@mahathiinfra.com",
+    department: "Infrastructure Planning",
+    designation: "General Manager",
+  },
+  {
+    id: 113,
+    employeeNumber: "MISPL0130",
+    firstName: "Deena",
+    middleName: "Raju",
+    lastName: "Karra",
+    displayName: "Deena Raju Karra",
+    fullName: "Deena Raju Karra",
+    workEmail: "deenaraju@mahathiinfra.com",
+    department: "Commercial & Contracts",
+    designation: "Commercial Manager",
+  },
+  {
+    id: 114,
+    employeeNumber: "MISPL0164",
+    firstName: "D Vasantha",
+    lastName: "Lakshmi",
+    displayName: "D Vasantha Lakshmi",
+    fullName: "D Vasantha Lakshmi",
+    workEmail: "hr@mahathiinfra.com",
+    department: "Human Resources",
+    designation: "HR Head",
+  },
+  {
+    id: 115,
+    employeeNumber: "MISPL0275",
+    firstName: "Sulamangalam",
+    middleName: "Dinesh",
+    lastName: "Kumar",
+    displayName: "S Dinesh Kumar",
+    fullName: "Sulamangalam Dinesh Kumar",
+    workEmail: "dinesh.s@mahathiinfra.com",
+    department: "Quality Assurance",
+    designation: "QA/QC Lead",
+  },
+  {
+    id: 116,
+    employeeNumber: "MISPL0333",
+    firstName: "Mohan",
+    lastName: "Jagatha",
+    displayName: "Mohan Jagatha",
+    fullName: "Mohan Jagatha",
+    workEmail: "mohan.j@mahathiinfra.com",
+    department: "Logistics & Supply",
+    designation: "Supply Chain Executive",
+  },
+  {
+    id: 117,
+    employeeNumber: "MISPL0372",
+    firstName: "Vidyasagar",
+    lastName: "Gorantala",
+    displayName: "G Vidyasagar",
+    fullName: "Vidyasagar Gorantala",
+    workEmail: "vidyasagar.g@mahathiinfra.com",
+    department: "Civil & Structural",
+    designation: "Structural Engineer",
+  },
+  {
+    id: 118,
+    employeeNumber: "MISPL0387",
+    firstName: "Thenmozhi",
+    lastName: "S",
+    displayName: "Thenmozhi",
+    fullName: "Thenmozhi S",
+    workEmail: "thenmozhi@mahathiinfra.com",
+    department: "Design & Drafting",
+    designation: "Senior Design Engineer",
+  },
+  {
+    id: 119,
+    employeeNumber: "MISPL0402",
+    firstName: "G Yathish",
+    middleName: "Sai Krishna",
+    lastName: "Posi",
+    displayName: "G Yathish Posi Sai Krishna",
+    fullName: "G Yathish Sai Krishna Posi",
+    workEmail: "yathish.g@mahathiinfra.com",
+    department: "Instrumentation",
+    designation: "Instrumentation Engineer",
+  },
+  {
+    id: 120,
+    employeeNumber: "MISPL0409",
+    firstName: "Ravi",
+    middleName: "Raghavendra Durga Prasad",
+    lastName: "K",
+    displayName: "K Ravi Raghavendra Durga Prasad",
+    fullName: "Ravi Raghavendra Durga Prasad K",
+    workEmail: "prasad@mahathiinfra.com",
+    department: "Electrical & Instrumentation",
+    designation: "Project Manager",
+  },
+  {
+    id: 121,
+    employeeNumber: "MISPL0415",
+    firstName: "Kranthi",
+    lastName: "Bharkam",
+    displayName: "Kranthi Bharkam",
+    fullName: "Kranthi Bharkam",
+    workEmail: "kranthi.b@mahathiinfra.com",
+    department: "Mechanical Systems",
+    designation: "Mechanical Engineer",
+  },
+  {
+    id: 122,
+    employeeNumber: "MISPL0423",
+    firstName: "Rammohan",
+    lastName: "Gubbala",
+    displayName: "Rammohan Gubbala",
+    fullName: "Rammohan Gubbala",
+    workEmail: "g.rammohan@mahathiinfra.com",
+    department: "Safety & HSE",
+    designation: "HSE Officer",
+  },
+  {
+    id: 123,
+    employeeNumber: "MISPL0429",
+    firstName: "Uppu",
+    lastName: "Durga Rao",
+    displayName: "Uppu Durga Rao",
+    fullName: "Uppu Durga Rao",
+    workEmail: "durgarao@mahathiinfra.com",
+    department: "Piping Engineering",
+    designation: "Piping Lead",
+  },
+  {
+    id: 124,
+    employeeNumber: "MISPL0430",
+    firstName: "Malaya",
+    lastName: "Kumar",
+    displayName: "Malaya Kumar",
+    fullName: "Malaya Kumar",
+    workEmail: "malayakumar@mahathiinfra.com",
+    department: "Planning & Controls",
+    designation: "Planning Engineer",
+  },
+  {
+    id: 125,
+    employeeNumber: "MISPL0440",
+    firstName: "Dileep Kumar",
+    lastName: "Gode",
+    displayName: "Dileep Kumar Gode",
+    fullName: "Dileep Kumar Gode",
+    workEmail: "dileep.g@mahathiinfra.com",
+    department: "Maintenance & Reliability",
+    designation: "Site Supervisor",
+  },
+  {
+    id: 126,
+    employeeNumber: "MISPL0466",
+    firstName: "Panthangi",
+    lastName: "Shashidhar",
+    displayName: "Panthangi Shashidhar",
+    fullName: "Panthangi Shashidhar",
+    workEmail: "shashidhar@mahathiinfra.com",
+    department: "Operations Coordination",
+    designation: "Operations Lead",
+  },
+  {
+    id: 127,
+    employeeNumber: "MISPL0485",
+    firstName: "Sumanth Krishna",
+    lastName: "Gaddam",
+    displayName: "Sumanth Krishna Gaddam",
+    fullName: "Sumanth Krishna Gaddam",
+    workEmail: "g.sumanthkrishna@mahathiinfra.com",
+    department: "Technology & Systems",
+    designation: "Systems Engineer",
+  },
+];
+
 export const DEMO_EMPLOYEES = [
-  { id: "1", name: "Arjun Mehta", department: "Engineering & Architecture", designation: "Principal Solutions Architect", employeeId: "EMP-2026" },
-  { id: "2", name: "Priya Sharma", department: "Enterprise Sales", designation: "Regional Sales Director", employeeId: "EMP-1042" },
-  { id: "3", name: "Rajesh Menon", department: "Operations Management", designation: "Senior Vice President", employeeId: "EMP-0089" },
-  { id: "4", name: "Vikram Mehta", department: "Product Strategy", designation: "Staff Product Manager", employeeId: "EMP-3011" },
+  ...REGISTERED_EMPLOYEES.map((emp) => ({
+    id: String(emp.id),
+    name: emp.fullName,
+    displayName: emp.displayName,
+    department: emp.department,
+    designation: emp.designation,
+    employeeId: emp.employeeNumber,
+    email: emp.workEmail,
+  })),
+  { id: "1", name: "Arjun Mehta", department: "Engineering & Architecture", designation: "Principal Solutions Architect", employeeId: "EMP-2026", email: "arjun@travora.com" },
+  { id: "2", name: "Priya Sharma", department: "Enterprise Sales", designation: "Regional Sales Director", employeeId: "EMP-1042", email: "priya@travora.com" },
+  { id: "3", name: "Rajesh Menon", department: "Operations Management", designation: "Senior Vice President", employeeId: "EMP-0089", email: "rajesh@travora.com" },
+  { id: "4", name: "Vikram Mehta", department: "Product Strategy", designation: "Staff Product Manager", employeeId: "EMP-3011", email: "vikram@travora.com" },
 ];
 
 export function getToken() {
@@ -149,63 +478,67 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
 }
 
 export async function login(credentials: { username: string; password: string }): Promise<AuthUser> {
-  const cleanUser = (credentials.username || "").trim().toLowerCase();
-  const cleanPass = (credentials.password || "").trim();
+  const rawUser = (credentials.username || "").trim();
+  const rawPass = (credentials.password || "").trim();
 
-  if (!cleanUser) {
-    throw new Error("Please enter your Login ID / Username.");
+  if (!rawUser) {
+    throw new Error("Please enter your Login ID / Employee Number.");
   }
-  if (!cleanPass) {
+  if (!rawPass) {
     throw new Error("Please enter your password.");
   }
 
-  // Strict credential verification for Travora accounts
-  const isEmployee = cleanUser === "employee" || cleanUser === "arjun";
-  const isApprover = cleanUser === "approver" || cleanUser === "rajesh";
-  const isTravelDesk = cleanUser === "traveldesk" || cleanUser === "travel_desk" || cleanUser === "travel-desk";
-  const isAdmin = cleanUser === "admin";
+  const userLower = rawUser.toLowerCase();
+  const passLower = rawPass.toLowerCase();
 
-  if (isEmployee) {
-    if (cleanPass !== "password") {
-      throw new Error("Invalid username or password.");
-    }
-    return {
-      id: 1,
-      username: "Arjun Mehta",
-      role: "EMPLOYEE",
-      employeeId: "EMP-2026",
-      token: "jwt-employee-auth-token",
-    };
-  }
-
-  if (isApprover) {
-    if (cleanPass !== "password") {
-      throw new Error("Invalid username or password.");
-    }
-    return {
-      id: 2,
-      username: "Rajesh Menon",
-      role: "APPROVER",
-      employeeId: "EMP-0089",
-      token: "jwt-approver-auth-token",
-    };
-  }
+  // 1. Travel Desk login: Employee ID "123456" and password "mahathi"
+  const isTravelDesk =
+    rawUser === "123456" ||
+    userLower === "traveldesk" ||
+    userLower === "travel_desk" ||
+    userLower === "travel-desk";
 
   if (isTravelDesk) {
-    if (cleanPass !== "password") {
+    const validDeskPass =
+      rawPass === "mahathi" ||
+      (rawUser !== "123456" && (rawPass === "password" || rawPass === "mahathi"));
+    if (!validDeskPass) {
       throw new Error("Invalid username or password.");
     }
     return {
       id: 4,
       username: "Travel Desk",
       role: "TRAVEL_DESK",
-      employeeId: "DSK-1001",
+      employeeId: "123456",
       token: "jwt-traveldesk-auth-token",
     };
   }
 
-  if (isAdmin) {
-    if (cleanPass !== "password" && cleanPass !== "admin" && cleanPass !== "admin123") {
+  // 2. Approver login: Employee ID "654321" and password "mahathi1"
+  const isApprover =
+    rawUser === "654321" ||
+    userLower === "approver" ||
+    userLower === "rajesh";
+
+  if (isApprover) {
+    const validApproverPass =
+      rawPass === "mahathi1" ||
+      (rawUser !== "654321" && (rawPass === "password" || rawPass === "mahathi1"));
+    if (!validApproverPass) {
+      throw new Error("Invalid username or password.");
+    }
+    return {
+      id: 2,
+      username: "Approver",
+      role: "APPROVER",
+      employeeId: "654321",
+      token: "jwt-approver-auth-token",
+    };
+  }
+
+  // 3. Admin login:
+  if (userLower === "admin") {
+    if (rawPass !== "password" && rawPass !== "admin" && rawPass !== "admin123") {
       throw new Error("Invalid username or password.");
     }
     return {
@@ -217,6 +550,40 @@ export async function login(credentials: { username: string; password: string })
     };
   }
 
+  // 4. Registered Employees from image:
+  // Login ID = Employee Number (e.g. AGR0001, MISPL0001)
+  // Password = Employee Number (same as login ID, case-insensitive)
+  const matchedEmployee = REGISTERED_EMPLOYEES.find(
+    (emp) => emp.employeeNumber.toLowerCase() === userLower
+  );
+
+  if (matchedEmployee) {
+    if (passLower !== matchedEmployee.employeeNumber.toLowerCase()) {
+      throw new Error("Invalid username or password.");
+    }
+    return {
+      id: matchedEmployee.id,
+      username: matchedEmployee.fullName,
+      role: "EMPLOYEE",
+      employeeId: matchedEmployee.employeeNumber,
+      token: `jwt-emp-${matchedEmployee.employeeNumber.toLowerCase()}-token`,
+    };
+  }
+
+  // Legacy demo employee accounts fallback
+  if (userLower === "employee" || userLower === "arjun" || userLower === "emp-2026") {
+    if (rawPass !== "password" && userLower !== passLower) {
+      throw new Error("Invalid username or password.");
+    }
+    return {
+      id: 1,
+      username: "Arjun Mehta",
+      role: "EMPLOYEE",
+      employeeId: "EMP-2026",
+      token: "jwt-employee-auth-token",
+    };
+  }
+
   // If a custom username is used and a live API base URL is provided, attempt backend login with timeout
   if (API_BASE_URL) {
     try {
@@ -224,6 +591,7 @@ export async function login(credentials: { username: string; password: string })
         method: "POST",
         body: JSON.stringify(credentials),
         skipAuth: true,
+        timeoutMs: 1200,
       });
       const role = String(response.role || "").toUpperCase() as Role;
       if (response.token && response.username && VALID_ROLES.includes(role) && response.id !== undefined && response.id !== null) {

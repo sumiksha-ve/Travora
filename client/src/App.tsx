@@ -2919,7 +2919,7 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
                 onChange={(event) => setUsername(event.target.value)}
                 required
                 autoComplete="username"
-                placeholder="Enter your username (e.g. employee, approver, traveldesk, admin)"
+                placeholder="Enter your employee number or ID (e.g. AGR0001, 123456, 654321)"
               />
             </label>
             <label className="field">
