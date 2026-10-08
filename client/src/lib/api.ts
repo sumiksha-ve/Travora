@@ -13,71 +13,8 @@ export type ApiRequestOptions = RequestInit & {
 export const AUTH_EXPIRED_EVENT = "travora:auth-expired";
 const VALID_ROLES: Role[] = ["EMPLOYEE", "APPROVER", "TRAVEL_DESK", "ADMIN"];
 
-export const DEMO_REQUESTS = [
-  {
-    id: "TR-9021",
-    fromLocation: "Bengaluru",
-    toLocation: "Singapore",
-    travelDate: "2026-10-15",
-    returnDate: "2026-10-20",
-    tripType: "Business",
-    projectName: "APAC Client Summit",
-    status: "BOOKED",
-    reason: "Meeting regional partners and client Q4 review",
-    employee: { id: 1, name: "Arjun Mehta", employeeId: "EMP-2026", department: "Engineering", designation: "Lead Architect" },
-  },
-  {
-    id: "TR-9022",
-    fromLocation: "Bengaluru",
-    toLocation: "New Delhi",
-    travelDate: "2026-10-24",
-    returnDate: "2026-10-27",
-    tripType: "Conference",
-    projectName: "Cloud Innovation Conclave",
-    status: "APPROVED",
-    reason: "Speaker slot at National Cloud Summit",
-    employee: { id: 1, name: "Arjun Mehta", employeeId: "EMP-2026", department: "Engineering", designation: "Lead Architect" },
-  },
-  {
-    id: "TR-9023",
-    fromLocation: "Mumbai",
-    toLocation: "London Heathrow",
-    travelDate: "2026-11-05",
-    returnDate: "2026-11-12",
-    tripType: "Business",
-    projectName: "European Strategy",
-    status: "PENDING",
-    reason: "Strategic alignment with UK operations team",
-    employee: { id: 1, name: "Arjun Mehta", employeeId: "EMP-2026", department: "Engineering", designation: "Lead Architect" },
-  },
-  {
-    id: "TR-9024",
-    fromLocation: "Bengaluru",
-    toLocation: "Dubai",
-    travelDate: "2026-09-10",
-    returnDate: "2026-09-14",
-    tripType: "Business",
-    projectName: "Middle East Fintech Expo",
-    status: "COMPLETED",
-    reason: "Represented Travora at Fintech Week",
-    employee: { id: 1, name: "Arjun Mehta", employeeId: "EMP-2026", department: "Engineering", designation: "Lead Architect" },
-  },
-];
-
-export const DEMO_BOOKINGS = [
-  {
-    id: "BK-701",
-    travelRequest: DEMO_REQUESTS[0],
-    bookingType: "FLIGHT",
-    bookingReference: "SQ-8921B",
-    provider: "Singapore Airlines",
-    cost: 38450,
-    savings: 4200,
-    bookedAt: "2026-10-06T10:30:00Z",
-    cancelled: false,
-    notes: "Direct flight SQ 503, E-ticket confirmed in system",
-  },
-];
+export const DEMO_REQUESTS: any[] = [];
+export const DEMO_BOOKINGS: any[] = [];
 
 export type EmployeeAccount = {
   id: number;
@@ -399,21 +336,15 @@ export const REGISTERED_EMPLOYEES: EmployeeAccount[] = [
   },
 ];
 
-export const DEMO_EMPLOYEES = [
-  ...REGISTERED_EMPLOYEES.map((emp) => ({
-    id: String(emp.id),
-    name: emp.fullName,
-    displayName: emp.displayName,
-    department: emp.department,
-    designation: emp.designation,
-    employeeId: emp.employeeNumber,
-    email: emp.workEmail,
-  })),
-  { id: "1", name: "Arjun Mehta", department: "Engineering & Architecture", designation: "Principal Solutions Architect", employeeId: "EMP-2026", email: "arjun@travora.com" },
-  { id: "2", name: "Priya Sharma", department: "Enterprise Sales", designation: "Regional Sales Director", employeeId: "EMP-1042", email: "priya@travora.com" },
-  { id: "3", name: "Rajesh Menon", department: "Operations Management", designation: "Senior Vice President", employeeId: "EMP-0089", email: "rajesh@travora.com" },
-  { id: "4", name: "Vikram Mehta", department: "Product Strategy", designation: "Staff Product Manager", employeeId: "EMP-3011", email: "vikram@travora.com" },
-];
+export const DEMO_EMPLOYEES = REGISTERED_EMPLOYEES.map((emp) => ({
+  id: String(emp.id),
+  name: emp.fullName,
+  displayName: emp.displayName,
+  department: emp.department,
+  designation: emp.designation,
+  employeeId: emp.employeeNumber,
+  email: emp.workEmail,
+}));
 
 export function getToken() {
   const token = window.localStorage.getItem("travora_token");
@@ -610,83 +541,91 @@ export function persistAuth(user: AuthUser) {
   if (!user.token) throw new Error("Cannot create an authenticated session without a JWT.");
   window.localStorage.setItem("travora_token", user.token);
   window.localStorage.setItem("travora_user", JSON.stringify({ id: user.id, username: user.username, role: user.role, employeeId: user.employeeId ?? null }));
-  // Migrate any legacy global data to this user's namespace
-  _migrateGlobalDataToUser();
 }
 
 /**
- * One-time migration: if old global (non-namespaced) localStorage keys exist,
- * copy that data into the current user's namespace and remove the old keys.
- * This prevents data loss for users who had data before the isolation fix.
+ * ─── LEGACY DATA PURGE & SANITIZATION ───
+ * Runs immediately on startup to remove legacy demo trips (Arjun Mehta, EMP-2026,
+ * TR-9021..9024, Singapore/Delhi mock records) that contaminated users' localStorage.
  */
-function _migrateGlobalDataToUser() {
+function _sanitizeLocalStorage() {
   if (!isBrowser) return;
-  const LEGACY_KEYS = [
-    "travora_local_requests",
-    "travora_local_bookings",
-    "travora_deleted_requests",
-    "travora_deleted_bookings",
-    "travora_all_wiped",
-  ];
-  const hasMigrated = window.localStorage.getItem("travora_migration_done");
-  if (hasMigrated) return;
+  try {
+    const SANITIZE_VERSION = "travora_v4_clean";
+    if (window.localStorage.getItem(SANITIZE_VERSION) === "true") return;
 
-  for (const key of LEGACY_KEYS) {
-    const val = window.localStorage.getItem(key);
-    if (val !== null) {
-      const nsKey = userKey(key);
-      // Only migrate if the user doesn't already have data under the new key
-      if (window.localStorage.getItem(nsKey) === null) {
-        window.localStorage.setItem(nsKey, val);
+    // Remove legacy unnamespaced and migrated keys
+    const LEGACY_KEYS = [
+      "travora_migration_done",
+      "travora_local_requests",
+      "travora_local_bookings",
+      "travora_deleted_requests",
+      "travora_deleted_bookings",
+      "travora_all_wiped",
+      "travora_expenses",
+    ];
+    LEGACY_KEYS.forEach((k) => window.localStorage.removeItem(k));
+
+    // Inspect all keys in localStorage to purge contaminated records
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      if (
+        key.startsWith("travora_local_") ||
+        key.startsWith("travora_deleted_") ||
+        key.startsWith("travora_all_wiped_")
+      ) {
+        const val = window.localStorage.getItem(key) || "";
+        if (
+          val.includes("EMP-2026") ||
+          val.includes("Arjun Mehta") ||
+          val.includes("TR-9021") ||
+          val.includes("TR-9022") ||
+          val.includes("TR-9023") ||
+          val.includes("TR-9024") ||
+          val.includes("BK-701")
+        ) {
+          keysToRemove.push(key);
+        }
       }
-      window.localStorage.removeItem(key);
     }
+    keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+    window.localStorage.setItem(SANITIZE_VERSION, "true");
+  } catch (e) {
+    console.warn("Storage sanitization error:", e);
   }
-  window.localStorage.setItem("travora_migration_done", "true");
 }
+
+// Run sanitization immediately
+_sanitizeLocalStorage();
 
 /**
- * ─── USER-NAMESPACED localStorage ───
+ * ─── UNIFIED SYSTEM STORAGE & MULTI-USER DATA ISOLATION ───
  *
- * Every localStorage key is prefixed with the currently authenticated
- * user's employeeId (or numeric id as fallback) so that each user has
- * a completely isolated data store.  If no user is logged in the keys
- * fall back to a shared "__anon__" namespace – but that should never
- * happen because the UI gates all data access behind authentication.
+ * All records live in a system repository with explicit owner IDs:
+ * - userId (numeric ID of creator)
+ * - employeeId (employee number of creator, e.g. AGR0001, MISPL0001)
+ * - employee (complete employee profile object)
+ *
+ * Strict Access Policy:
+ * 1. EMPLOYEE: Can ONLY see, fetch, and mutate records where employeeId === current.employeeId
+ *    or userId === current.id. Never sees another employee's records.
+ * 2. APPROVER: Can see all submitted requests across all employees to review & decide.
+ * 3. TRAVEL_DESK: Can see all approved requests to book tickets & attach PNRs.
+ * 4. ADMIN: Can view all requests and bookings across the organization.
  */
 
-function _userPrefix(): string {
-  const user = getStoredUser();
-  if (user?.employeeId) return user.employeeId;
-  if (user?.id) return String(user.id);
-  return "__anon__";
-}
-
-function userKey(base: string): string {
-  return `${base}_${_userPrefix()}`;
-}
-
-/* Demo data is only shown to the user whose employee ID matches the
-   hardcoded employee inside DEMO_REQUESTS (EMP-2026 / Arjun Mehta).
-   All other users start with an empty slate. */
-function _demoRequestsForCurrentUser(): any[] {
-  const user = getStoredUser();
-  if (!user) return [];
-  // Only the legacy demo employee sees demo requests
-  if (user.employeeId === "EMP-2026" || user.id === 1) return DEMO_REQUESTS;
-  return [];
-}
-function _demoBookingsForCurrentUser(): any[] {
-  const user = getStoredUser();
-  if (!user) return [];
-  if (user.employeeId === "EMP-2026" || user.id === 1) return DEMO_BOOKINGS;
-  return [];
-}
+const SYSTEM_REQUESTS_KEY = "travora_system_requests";
+const SYSTEM_BOOKINGS_KEY = "travora_system_bookings";
+const SYSTEM_NOTIFICATIONS_KEY = "travora_system_notifications";
+const DELETED_REQUESTS_KEY = "travora_deleted_request_ids";
+const DELETED_BOOKINGS_KEY = "travora_deleted_booking_ids";
 
 export function getDeletedRequestIds(): Set<string> {
   if (!isBrowser) return new Set();
   try {
-    const raw = window.localStorage.getItem(userKey("travora_deleted_requests"));
+    const raw = window.localStorage.getItem(DELETED_REQUESTS_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) return new Set(arr.map(String));
@@ -704,7 +643,7 @@ export function markRequestIdsDeleted(ids: Array<string | number>) {
     ids.forEach((id) => {
       if (id !== undefined && id !== null) set.add(String(id));
     });
-    window.localStorage.setItem(userKey("travora_deleted_requests"), JSON.stringify(Array.from(set)));
+    window.localStorage.setItem(DELETED_REQUESTS_KEY, JSON.stringify(Array.from(set)));
   } catch (e) {
     console.warn("Failed to save deleted request ids", e);
   }
@@ -713,7 +652,7 @@ export function markRequestIdsDeleted(ids: Array<string | number>) {
 export function getDeletedBookingIds(): Set<string> {
   if (!isBrowser) return new Set();
   try {
-    const raw = window.localStorage.getItem(userKey("travora_deleted_bookings"));
+    const raw = window.localStorage.getItem(DELETED_BOOKINGS_KEY);
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) return new Set(arr.map(String));
@@ -731,50 +670,45 @@ export function markBookingIdsDeleted(ids: Array<string | number>) {
     ids.forEach((id) => {
       if (id !== undefined && id !== null) set.add(String(id));
     });
-    window.localStorage.setItem(userKey("travora_deleted_bookings"), JSON.stringify(Array.from(set)));
+    window.localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
   } catch (e) {
     console.warn("Failed to save deleted booking ids", e);
   }
 }
 
-export function getLocalRequests(): any[] {
+function _getAllSystemRequests(): any[] {
   if (!isBrowser) return [];
-  if (window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
-    return [];
-  }
   const deletedIds = getDeletedRequestIds();
   try {
-    const raw = window.localStorage.getItem(userKey("travora_local_requests"));
-    if (raw !== null) {
+    const raw = window.localStorage.getItem(SYSTEM_REQUESTS_KEY);
+    if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         return parsed.filter((r) => !deletedIds.has(String(r.id)));
       }
     }
   } catch (e) {
-    console.warn("Failed to load local requests", e);
+    console.warn("Failed to load system requests", e);
   }
-  return _demoRequestsForCurrentUser().filter((r) => !deletedIds.has(String(r.id)));
+  return [];
 }
 
-export function saveLocalRequests(requests: any[]) {
+function _saveAllSystemRequests(requests: any[]) {
+  if (!isBrowser) return;
   try {
-    window.localStorage.setItem(userKey("travora_local_requests"), JSON.stringify(requests));
+    window.localStorage.setItem(SYSTEM_REQUESTS_KEY, JSON.stringify(requests));
   } catch (e) {
-    console.warn("Failed to save local requests", e);
+    console.warn("Failed to save system requests", e);
   }
 }
 
-export function getLocalBookings(): any[] {
+function _getAllSystemBookings(): any[] {
   if (!isBrowser) return [];
-  if (window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
-    return [];
-  }
-  const deletedReqIds = getDeletedRequestIds();
   const deletedBookingIds = getDeletedBookingIds();
+  const deletedReqIds = getDeletedRequestIds();
   try {
-    const raw = window.localStorage.getItem(userKey("travora_local_bookings"));
-    if (raw !== null) {
+    const raw = window.localStorage.getItem(SYSTEM_BOOKINGS_KEY);
+    if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         return parsed.filter(
@@ -783,86 +717,204 @@ export function getLocalBookings(): any[] {
       }
     }
   } catch (e) {
-    console.warn("Failed to load local bookings", e);
+    console.warn("Failed to load system bookings", e);
   }
-  return _demoBookingsForCurrentUser().filter(
-    (b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id))
-  );
+  return [];
 }
 
-export function saveLocalBookings(bookings: any[]) {
+function _saveAllSystemBookings(bookings: any[]) {
+  if (!isBrowser) return;
   try {
-    window.localStorage.setItem(userKey("travora_local_bookings"), JSON.stringify(bookings));
+    window.localStorage.setItem(SYSTEM_BOOKINGS_KEY, JSON.stringify(bookings));
   } catch (e) {
-    console.warn("Failed to save local bookings", e);
+    console.warn("Failed to save system bookings", e);
   }
+}
+
+function _getAllSystemNotifications(): any[] {
+  if (!isBrowser) return [];
+  try {
+    const raw = window.localStorage.getItem(SYSTEM_NOTIFICATIONS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.warn("Failed to load system notifications", e);
+  }
+  return [];
+}
+
+function _saveAllSystemNotifications(notifs: any[]) {
+  if (!isBrowser) return;
+  try {
+    window.localStorage.setItem(SYSTEM_NOTIFICATIONS_KEY, JSON.stringify(notifs));
+  } catch (e) {
+    console.warn("Failed to save system notifications", e);
+  }
+}
+
+/** Check if a record belongs to the given user */
+function _isOwner(record: any, user: AuthUser | null): boolean {
+  if (!user || !record) return false;
+  const userEmpId = String(user.employeeId || "").trim().toLowerCase();
+  const userIdStr = String(user.id);
+
+  const recEmpId = String(record.employeeId || record.employee?.employeeId || "").trim().toLowerCase();
+  const recUserId = String(record.userId || record.employee?.id || "").trim();
+
+  if (userEmpId && recEmpId && userEmpId === recEmpId) return true;
+  if (userIdStr && recUserId && userIdStr === recUserId) return true;
+  return false;
 }
 
 export const travelRequestsApi = {
   list: async () => {
-    if (isBrowser && window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
-      return [];
-    }
+    const user = getStoredUser<AuthUser>();
     const deleted = getDeletedRequestIds();
+
+    let records: any[] = [];
     try {
       const data = await apiRequest<any[]>("/api/travel-requests", { ignoreAuthFailure: true, timeoutMs: 1200 });
       if (Array.isArray(data)) {
-        return data.filter((r) => !deleted.has(String(r.id)));
+        records = data.filter((r) => !deleted.has(String(r.id)));
+      } else {
+        records = _getAllSystemRequests();
       }
-      return getLocalRequests();
     } catch {
-      return getLocalRequests();
+      records = _getAllSystemRequests();
     }
+
+    // Role-based data isolation
+    if (user && user.role === "EMPLOYEE") {
+      return records.filter((r) => _isOwner(r, user));
+    }
+    // APPROVER, TRAVEL_DESK, and ADMIN see all requests across employees
+    return records;
   },
+
   get: async (id: string) => {
+    const user = getStoredUser<AuthUser>();
     const deleted = getDeletedRequestIds();
     if (deleted.has(String(id))) return null;
+
+    let req: any = null;
     try {
-      const req = await apiRequest(`/api/travel-requests/${id}`, { ignoreAuthFailure: true, timeoutMs: 1200 });
-      if (req && !deleted.has(String((req as any).id))) return req;
-      return getLocalRequests().find((r) => String(r.id) === String(id)) || null;
+      const remote = await apiRequest(`/api/travel-requests/${id}`, { ignoreAuthFailure: true, timeoutMs: 1200 });
+      if (remote && !deleted.has(String((remote as any).id))) req = remote;
+      else req = _getAllSystemRequests().find((r) => String(r.id) === String(id)) || null;
     } catch {
-      return getLocalRequests().find((r) => String(r.id) === String(id)) || null;
+      req = _getAllSystemRequests().find((r) => String(r.id) === String(id)) || null;
     }
+
+    if (!req) return null;
+    // Ownership enforcement for employees
+    if (user && user.role === "EMPLOYEE" && !_isOwner(req, user)) {
+      return null;
+    }
+    return req;
   },
+
   create: async (payload: unknown) => {
-    if (isBrowser) {
-      window.localStorage.removeItem(userKey("travora_all_wiped"));
-    }
-    const user = getStoredUser();
+    const user = getStoredUser<AuthUser>();
+    if (!user) throw new Error("Authentication required to create a travel request.");
+
     const regEmp = REGISTERED_EMPLOYEES.find(
-      (e) => e.employeeNumber === user?.employeeId
+      (e) => e.employeeNumber.toLowerCase() === String(user.employeeId || "").toLowerCase()
     );
+
     const newReq = {
       id: `TR-${Math.floor(Math.random() * 9000 + 1000)}`,
-      ...(payload as object),
+      userId: user.id,
+      employeeId: user.employeeId || `EMP-${user.id}`,
+      passenger: regEmp?.fullName || user.username,
       status: "PENDING",
       createdAt: new Date().toISOString(),
       employee: {
-        id: user?.id || 1,
-        name: regEmp?.fullName || user?.username || "Unknown Employee",
-        employeeId: user?.employeeId || "UNKNOWN",
-        department: regEmp?.department || "General",
+        id: user.id,
+        name: regEmp?.fullName || user.username,
+        employeeId: user.employeeId || `EMP-${user.id}`,
+        department: regEmp?.department || "General Operations",
         designation: regEmp?.designation || "Employee",
       },
+      ...(payload as object),
     };
-    const current = getLocalRequests();
-    saveLocalRequests([newReq, ...current]);
+
+    const current = _getAllSystemRequests();
+    _saveAllSystemRequests([newReq, ...current]);
+
+    // Send notifications
+    const notifs = _getAllSystemNotifications();
+    const newNotifs = [
+      {
+        id: `NOTIF-${Date.now()}-1`,
+        recipientId: user.id,
+        recipientEmployeeId: user.employeeId,
+        title: "Travel request submitted",
+        message: `Your request to ${(newReq as any).toLocation || "destination"} was submitted for manager review.`,
+        type: "REQUEST",
+        createdAt: new Date().toISOString(),
+        read: false,
+      },
+      {
+        id: `NOTIF-${Date.now()}-2`,
+        targetRole: "APPROVER",
+        title: "New travel request pending review",
+        message: `${regEmp?.fullName || user.username} submitted a request to ${(newReq as any).toLocation || "destination"}.`,
+        type: "APPROVAL",
+        createdAt: new Date().toISOString(),
+        read: false,
+      },
+    ];
+    _saveAllSystemNotifications([...newNotifs, ...notifs]);
+
     try {
-      await apiRequest("/api/travel-requests", { method: "POST", body: JSON.stringify(payload), ignoreAuthFailure: true });
+      await apiRequest("/api/travel-requests", { method: "POST", body: JSON.stringify(newReq), ignoreAuthFailure: true });
     } catch {
-      // Backend offline fallback handled by localStorage
+      // Backend offline fallback handled by system storage
     }
     return newReq;
   },
+
   approve: async (id: string, approverName: string, comment = "") => {
-    const current = getLocalRequests();
-    const updated = current.map((r) =>
-      String(r.id) === String(id)
-        ? { ...r, status: "APPROVED", approverName, approvalComment: comment, approvalDate: new Date().toISOString() }
-        : r
-    );
-    saveLocalRequests(updated);
+    const current = _getAllSystemRequests();
+    let targetReq: any = null;
+    const updated = current.map((r) => {
+      if (String(r.id) === String(id)) {
+        targetReq = { ...r, status: "APPROVED", approverName, approvalComment: comment, approvalDate: new Date().toISOString() };
+        return targetReq;
+      }
+      return r;
+    });
+    _saveAllSystemRequests(updated);
+
+    // Notify the employee & travel desk
+    if (targetReq) {
+      const notifs = _getAllSystemNotifications();
+      const newNotifs = [
+        {
+          id: `NOTIF-${Date.now()}-1`,
+          recipientId: targetReq.userId,
+          recipientEmployeeId: targetReq.employeeId,
+          title: "Travel request approved",
+          message: `Your trip to ${targetReq.toLocation} was approved by ${approverName}. Ready for booking.`,
+          type: "APPROVAL",
+          createdAt: new Date().toISOString(),
+          read: false,
+        },
+        {
+          id: `NOTIF-${Date.now()}-2`,
+          targetRole: "TRAVEL_DESK",
+          title: "Approved trip ready to book",
+          message: `Approved trip for ${targetReq.passenger || targetReq.employee?.name} to ${targetReq.toLocation} is ready for ticketing.`,
+          type: "BOOKING",
+          createdAt: new Date().toISOString(),
+          read: false,
+        },
+      ];
+      _saveAllSystemNotifications([...newNotifs, ...notifs]);
+    }
+
     try {
       await apiRequest(`/api/travel-requests/${id}/approve`, {
         method: "PATCH",
@@ -870,18 +922,38 @@ export const travelRequestsApi = {
         ignoreAuthFailure: true,
       });
     } catch {
-      // Backend offline fallback
+      // Offline fallback
     }
     return { id, status: "APPROVED", approverName, comment };
   },
+
   reject: async (id: string, approverName: string, comment = "") => {
-    const current = getLocalRequests();
-    const updated = current.map((r) =>
-      String(r.id) === String(id)
-        ? { ...r, status: "REJECTED", approverName, approvalComment: comment, rejectionDate: new Date().toISOString() }
-        : r
-    );
-    saveLocalRequests(updated);
+    const current = _getAllSystemRequests();
+    let targetReq: any = null;
+    const updated = current.map((r) => {
+      if (String(r.id) === String(id)) {
+        targetReq = { ...r, status: "REJECTED", approverName, approvalComment: comment, rejectionDate: new Date().toISOString() };
+        return targetReq;
+      }
+      return r;
+    });
+    _saveAllSystemRequests(updated);
+
+    if (targetReq) {
+      const notifs = _getAllSystemNotifications();
+      const newNotif = {
+        id: `NOTIF-${Date.now()}`,
+        recipientId: targetReq.userId,
+        recipientEmployeeId: targetReq.employeeId,
+        title: "Travel request rejected",
+        message: `Your trip to ${targetReq.toLocation} was rejected by ${approverName}. Reason: ${comment || "Policy compliance"}.`,
+        type: "REJECTION",
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+      _saveAllSystemNotifications([newNotif, ...notifs]);
+    }
+
     try {
       await apiRequest(`/api/travel-requests/${id}/reject`, {
         method: "PATCH",
@@ -889,77 +961,102 @@ export const travelRequestsApi = {
         ignoreAuthFailure: true,
       });
     } catch {
-      // Backend offline fallback
+      // Offline fallback
     }
     return { id, status: "REJECTED", approverName, comment };
   },
+
   delete: async (id: string | number) => {
     const strId = String(id);
-    markRequestIdsDeleted([strId]);
+    const user = getStoredUser<AuthUser>();
 
-    // Remove from local requests
-    const currentReqs = getLocalRequests();
-    saveLocalRequests(currentReqs.filter((r) => String(r.id) !== strId));
-
-    // Remove linked bookings
-    const currentBookings = getLocalBookings();
-    const linkedBookings = currentBookings.filter((b) => String(b.travelRequest?.id) === strId);
-    if (linkedBookings.length > 0) {
-      markBookingIdsDeleted(linkedBookings.map((b) => b.id));
+    // Ownership check for employees
+    const all = _getAllSystemRequests();
+    const req = all.find((r) => String(r.id) === strId);
+    if (user && user.role === "EMPLOYEE" && req && !_isOwner(req, user)) {
+      throw new Error("You can only delete your own travel requests.");
     }
-    saveLocalBookings(currentBookings.filter((b) => String(b.travelRequest?.id) !== strId));
+
+    markRequestIdsDeleted([strId]);
+    _saveAllSystemRequests(all.filter((r) => String(r.id) !== strId));
+
+    // Also remove linked bookings
+    const bookings = _getAllSystemBookings();
+    const linked = bookings.filter((b) => String(b.travelRequest?.id) === strId);
+    if (linked.length > 0) {
+      markBookingIdsDeleted(linked.map((b) => b.id));
+      _saveAllSystemBookings(bookings.filter((b) => String(b.travelRequest?.id) !== strId));
+    }
 
     try {
       await apiRequest(`/api/travel-requests/${strId}`, { method: "DELETE", ignoreAuthFailure: true, timeoutMs: 1000 });
     } catch {
-      // Backend offline fallback
+      // Offline fallback
     }
     return { success: true, id: strId };
   },
-  deleteAll: async () => {
-    if (isBrowser) {
-      window.localStorage.setItem(userKey("travora_all_wiped"), "true");
-    }
-    const currentReqs = getLocalRequests();
-    const currentBookings = getLocalBookings();
-    markRequestIdsDeleted(currentReqs.map((r) => r.id));
-    markBookingIdsDeleted(currentBookings.map((b) => b.id));
-    markRequestIdsDeleted(_demoRequestsForCurrentUser().map((r) => r.id));
-    markBookingIdsDeleted(_demoBookingsForCurrentUser().map((b) => b.id));
 
-    saveLocalRequests([]);
-    saveLocalBookings([]);
+  deleteAll: async () => {
+    const user = getStoredUser<AuthUser>();
+    const allReqs = _getAllSystemRequests();
+    const allBookings = _getAllSystemBookings();
+
+    if (user && user.role === "EMPLOYEE") {
+      // Delete ONLY the authenticated employee's records
+      const userReqs = allReqs.filter((r) => _isOwner(r, user));
+      const userReqIds = new Set(userReqs.map((r) => String(r.id)));
+      markRequestIdsDeleted(Array.from(userReqIds));
+
+      const remainingReqs = allReqs.filter((r) => !userReqIds.has(String(r.id)));
+      _saveAllSystemRequests(remainingReqs);
+
+      const userBookings = allBookings.filter((b) => userReqIds.has(String(b.travelRequest?.id)) || _isOwner(b, user));
+      markBookingIdsDeleted(userBookings.map((b) => b.id));
+      const remainingBookings = allBookings.filter((b) => !userReqIds.has(String(b.travelRequest?.id)) && !_isOwner(b, user));
+      _saveAllSystemBookings(remainingBookings);
+    } else {
+      // Admin / Approver wipe
+      markRequestIdsDeleted(allReqs.map((r) => r.id));
+      markBookingIdsDeleted(allBookings.map((b) => b.id));
+      _saveAllSystemRequests([]);
+      _saveAllSystemBookings([]);
+    }
 
     try {
       await apiRequest("/api/travel-requests/all", { method: "DELETE", ignoreAuthFailure: true, timeoutMs: 1000 });
     } catch {
-      // Backend offline fallback
+      // Offline fallback
     }
     return { success: true };
   },
+
   deletePastOrCompleted: async (options?: { includeApproved?: boolean; includeBooked?: boolean }) => {
-    const currentReqs = getLocalRequests();
+    const user = getStoredUser<AuthUser>();
+    const allReqs = _getAllSystemRequests();
     const todayStr = new Date().toISOString().split("T")[0];
 
     const toDelete: any[] = [];
     const toKeep: any[] = [];
 
-    for (const r of currentReqs) {
+    for (const r of allReqs) {
+      // If employee, only evaluate their own records
+      if (user && user.role === "EMPLOYEE" && !_isOwner(r, user)) {
+        toKeep.push(r);
+        continue;
+      }
+
       const status = String(r.status || "").toUpperCase();
       const returnDate = r.returnDate ? String(r.returnDate).split("T")[0] : null;
       const travelDate = r.travelDate ? String(r.travelDate).split("T")[0] : null;
       const isPastDate = (returnDate && returnDate < todayStr) || (!returnDate && travelDate && travelDate < todayStr);
 
       if (options?.includeApproved) {
-        // Approver decision history clear: remove decisions that have already been reviewed
         if (status !== "PENDING") {
           toDelete.push(r);
           continue;
         }
       }
 
-      // General mode (Employee/Admin past purge):
-      // Completed, Cancelled, Rejected, or dates in past
       if (status === "COMPLETED" || status === "CANCELLED" || status === "REJECTED" || isPastDate) {
         toDelete.push(r);
       } else if (options?.includeBooked && status === "BOOKED") {
@@ -969,102 +1066,139 @@ export const travelRequestsApi = {
       }
     }
 
-    const deletedIds = toDelete.map((r) => r.id);
-    markRequestIdsDeleted(deletedIds);
-    saveLocalRequests(toKeep);
+    markRequestIdsDeleted(toDelete.map((r) => r.id));
+    _saveAllSystemRequests(toKeep);
 
     const keptIdSet = new Set(toKeep.map((r) => String(r.id)));
-    const currentBookings = getLocalBookings();
-    const bookingsToKeep = currentBookings.filter((b) => keptIdSet.has(String(b.travelRequest?.id)));
-    const bookingsToDelete = currentBookings.filter((b) => !keptIdSet.has(String(b.travelRequest?.id)));
+    const allBookings = _getAllSystemBookings();
+    const bookingsToKeep = allBookings.filter((b) => keptIdSet.has(String(b.travelRequest?.id)));
+    const bookingsToDelete = allBookings.filter((b) => !keptIdSet.has(String(b.travelRequest?.id)));
     markBookingIdsDeleted(bookingsToDelete.map((b) => b.id));
-    saveLocalBookings(bookingsToKeep);
+    _saveAllSystemBookings(bookingsToKeep);
 
     return { success: true, count: toDelete.length };
   },
+
   clearDecisionHistory: async () => {
     return travelRequestsApi.deletePastOrCompleted({ includeApproved: true });
   },
+
   resetDemo: async () => {
-    if (isBrowser) {
-      window.localStorage.removeItem(userKey("travora_all_wiped"));
-      window.localStorage.removeItem(userKey("travora_deleted_requests"));
-      window.localStorage.removeItem(userKey("travora_deleted_bookings"));
-    }
-    saveLocalRequests(_demoRequestsForCurrentUser());
-    saveLocalBookings(_demoBookingsForCurrentUser());
+    // Clean empty slate for all users
+    markRequestIdsDeleted(_getAllSystemRequests().map((r) => r.id));
+    markBookingIdsDeleted(_getAllSystemBookings().map((b) => b.id));
+    _saveAllSystemRequests([]);
+    _saveAllSystemBookings([]);
+    _saveAllSystemNotifications([]);
     return { success: true };
   },
 };
 
 export const bookingsApi = {
   list: async () => {
-    if (isBrowser && window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
-      return [];
-    }
-    const deletedReqIds = getDeletedRequestIds();
+    const user = getStoredUser<AuthUser>();
     const deletedBookingIds = getDeletedBookingIds();
+    const deletedReqIds = getDeletedRequestIds();
+
+    let records: any[] = [];
     try {
       const data = await apiRequest<any[]>("/api/bookings", { ignoreAuthFailure: true, timeoutMs: 1200 });
       if (Array.isArray(data)) {
-        return data.filter(
+        records = data.filter(
           (b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id))
         );
+      } else {
+        records = _getAllSystemBookings();
       }
-      return getLocalBookings();
     } catch {
-      return getLocalBookings();
+      records = _getAllSystemBookings();
     }
+
+    if (user && user.role === "EMPLOYEE") {
+      return records.filter((b) => _isOwner(b, user) || _isOwner(b.travelRequest, user));
+    }
+    // APPROVER, TRAVEL_DESK, and ADMIN see all bookings
+    return records;
   },
+
   byTravelRequest: async (id: string) => {
+    const user = getStoredUser<AuthUser>();
     const deletedReqIds = getDeletedRequestIds();
     const deletedBookingIds = getDeletedBookingIds();
     if (deletedReqIds.has(String(id))) return null;
+
+    let booking: any = null;
     try {
       const data = await apiRequest(`/api/bookings/travel-request/${id}`, { ignoreAuthFailure: true, timeoutMs: 1200 });
       if (data && (!Array.isArray(data) || data.length > 0)) {
         const arr = Array.isArray(data) ? data : [data];
         const valid = arr.filter((b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id)));
-        return Array.isArray(data) ? valid : valid[0] || null;
+        booking = Array.isArray(data) ? valid : valid[0] || null;
+      } else {
+        booking = _getAllSystemBookings().filter((b) => String(b.travelRequest?.id) === String(id));
       }
-      return getLocalBookings().filter((b) => String(b.travelRequest?.id) === String(id));
     } catch {
-      return getLocalBookings().filter((b) => String(b.travelRequest?.id) === String(id));
+      booking = _getAllSystemBookings().filter((b) => String(b.travelRequest?.id) === String(id));
     }
+
+    const items = Array.isArray(booking) ? booking : booking ? [booking] : [];
+    if (user && user.role === "EMPLOYEE") {
+      const userItems = items.filter((b: any) => _isOwner(b, user) || _isOwner(b.travelRequest, user));
+      return Array.isArray(booking) ? userItems : userItems[0] || null;
+    }
+    return booking;
   },
+
   create: async (payload: any) => {
-    if (isBrowser) {
-      window.localStorage.removeItem(userKey("travora_all_wiped"));
-    }
     const reqId = payload.travelRequest?.id;
-    const req = getLocalRequests().find((r) => String(r.id) === String(reqId)) || { id: reqId };
+    const req = _getAllSystemRequests().find((r) => String(r.id) === String(reqId)) || { id: reqId };
+
     const newBooking = {
       id: `BK-${Math.floor(Math.random() * 900 + 100)}`,
       ...payload,
+      userId: req.userId,
+      employeeId: req.employeeId,
       travelRequest: req,
       bookedAt: new Date().toISOString(),
       cancelled: false,
     };
-    const currentBookings = getLocalBookings();
-    saveLocalBookings([newBooking, ...currentBookings]);
+
+    const currentBookings = _getAllSystemBookings();
+    _saveAllSystemBookings([newBooking, ...currentBookings]);
 
     // Update travel request status to BOOKED
-    const currentReqs = getLocalRequests();
+    const currentReqs = _getAllSystemRequests();
     const updatedReqs = currentReqs.map((r) =>
       String(r.id) === String(reqId) ? { ...r, status: "BOOKED" } : r
     );
-    saveLocalRequests(updatedReqs);
+    _saveAllSystemRequests(updatedReqs);
+
+    // Notify employee of confirmed ticket
+    const notifs = _getAllSystemNotifications();
+    const newNotif = {
+      id: `NOTIF-${Date.now()}`,
+      recipientId: req.userId,
+      recipientEmployeeId: req.employeeId,
+      title: "Trip booked & ticket issued",
+      message: `Your booking ${newBooking.bookingReference || ""} (${newBooking.provider || "Carrier"}) is confirmed.`,
+      type: "BOOKING",
+      createdAt: new Date().toISOString(),
+      read: false,
+    };
+    _saveAllSystemNotifications([newNotif, ...notifs]);
+
     try {
       await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload), ignoreAuthFailure: true });
     } catch {
-      // Backend offline fallback
+      // Backend offline fallback handled by system storage
     }
     return newBooking;
   },
+
   update: async (id: string, payload: any) => {
-    const current = getLocalBookings();
+    const current = _getAllSystemBookings();
     const updated = current.map((b) => (String(b.id) === String(id) ? { ...b, ...payload } : b));
-    saveLocalBookings(updated);
+    _saveAllSystemBookings(updated);
     try {
       await apiRequest(`/api/bookings/${id}`, { method: "PUT", body: JSON.stringify(payload), ignoreAuthFailure: true });
     } catch {
@@ -1072,12 +1206,34 @@ export const bookingsApi = {
     }
     return { id, ...payload };
   },
+
   cancel: async (id: string, reason: string, cancellationCharge = 0) => {
-    const current = getLocalBookings();
-    const updated = current.map((b) =>
-      String(b.id) === String(id) ? { ...b, cancelled: true, cancellationReason: reason, cancellationCharge } : b
-    );
-    saveLocalBookings(updated);
+    const current = _getAllSystemBookings();
+    let cancelledBooking: any = null;
+    const updated = current.map((b) => {
+      if (String(b.id) === String(id)) {
+        cancelledBooking = { ...b, cancelled: true, cancellationReason: reason, cancellationCharge };
+        return cancelledBooking;
+      }
+      return b;
+    });
+    _saveAllSystemBookings(updated);
+
+    if (cancelledBooking) {
+      const notifs = _getAllSystemNotifications();
+      const newNotif = {
+        id: `NOTIF-${Date.now()}`,
+        recipientId: cancelledBooking.userId,
+        recipientEmployeeId: cancelledBooking.employeeId,
+        title: "Booking cancelled",
+        message: `Your booking ${cancelledBooking.bookingReference || ""} was cancelled. Reason: ${reason}.`,
+        type: "CANCELLATION",
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+      _saveAllSystemNotifications([newNotif, ...notifs]);
+    }
+
     try {
       await apiRequest(`/api/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}&cancellationCharge=${cancellationCharge}`, { method: "PUT", ignoreAuthFailure: true });
     } catch {
@@ -1085,11 +1241,12 @@ export const bookingsApi = {
     }
     return { id, cancelled: true, cancellationReason: reason, cancellationCharge };
   },
+
   delete: async (id: string) => {
     const strId = String(id);
     markBookingIdsDeleted([strId]);
-    const current = getLocalBookings();
-    saveLocalBookings(current.filter((b) => String(b.id) !== strId));
+    const current = _getAllSystemBookings();
+    _saveAllSystemBookings(current.filter((b) => String(b.id) !== strId));
     try {
       await apiRequest(`/api/bookings/${strId}`, { method: "DELETE", ignoreAuthFailure: true, timeoutMs: 1000 });
     } catch {
@@ -1097,35 +1254,71 @@ export const bookingsApi = {
     }
     return { success: true, id: strId };
   },
+
   deleteAll: async () => {
-    const currentBookings = getLocalBookings();
+    const currentBookings = _getAllSystemBookings();
     markBookingIdsDeleted(currentBookings.map((b) => b.id));
-    saveLocalBookings([]);
+    _saveAllSystemBookings([]);
     return { success: true };
   },
 };
 
 export const notificationsApi = {
   list: async () => {
-    try { return await apiRequest("/api/notifications"); }
-    catch {
-      return [
-        { id: "1", title: "Flight E-Ticket Issued", message: "Air India ticket AI-9821 issued for Singapore summit", type: "BOOKING", createdAt: new Date().toISOString(), read: false },
-        { id: "2", title: "Travel Request Approved", message: "Rajesh Menon approved trip to New Delhi", type: "APPROVAL", createdAt: new Date(Date.now() - 3600000).toISOString(), read: true },
-      ];
+    const user = getStoredUser<AuthUser>();
+    try {
+      const data = await apiRequest<any[]>("/api/notifications");
+      if (Array.isArray(data)) return data;
+    } catch {
+      // Fall through to system notifications
     }
+
+    if (!user) return [];
+    const allNotifs = _getAllSystemNotifications();
+    return allNotifs.filter((n) => {
+      if (n.recipientId && String(n.recipientId) === String(user.id)) return true;
+      if (n.recipientEmployeeId && String(n.recipientEmployeeId).toLowerCase() === String(user.employeeId || "").toLowerCase()) return true;
+      if (n.targetRole && n.targetRole === user.role) return true;
+      return false;
+    });
   },
+
   unreadCount: async () => {
-    try { return await apiRequest<number>("/api/notifications/unread-count"); }
-    catch { return 1; }
+    const list = await notificationsApi.list();
+    return list.filter((n: any) => !n.read).length;
   },
+
   markRead: async (id: string | number) => {
-    try { return await apiRequest(`/api/notifications/${id}/read`, { method: "PATCH" }); }
-    catch { return { id, read: true }; }
+    const strId = String(id);
+    const allNotifs = _getAllSystemNotifications();
+    const updated = allNotifs.map((n) => (String(n.id) === strId ? { ...n, read: true } : n));
+    _saveAllSystemNotifications(updated);
+    try {
+      await apiRequest(`/api/notifications/${id}/read`, { method: "PATCH" });
+    } catch {
+      // Offline fallback
+    }
+    return { id, read: true };
   },
+
   markAllRead: async () => {
-    try { return await apiRequest("/api/notifications/read-all", { method: "PATCH" }); }
-    catch { return { success: true }; }
+    const user = getStoredUser<AuthUser>();
+    if (!user) return { success: true };
+    const allNotifs = _getAllSystemNotifications();
+    const updated = allNotifs.map((n) => {
+      const match =
+        (n.recipientId && String(n.recipientId) === String(user.id)) ||
+        (n.recipientEmployeeId && String(n.recipientEmployeeId).toLowerCase() === String(user.employeeId || "").toLowerCase()) ||
+        (n.targetRole && n.targetRole === user.role);
+      return match ? { ...n, read: true } : n;
+    });
+    _saveAllSystemNotifications(updated);
+    try {
+      await apiRequest("/api/notifications/read-all", { method: "PATCH" });
+    } catch {
+      // Offline fallback
+    }
+    return { success: true };
   },
 };
 
@@ -1142,8 +1335,29 @@ export const employeesApi = {
 
 export const dashboardApi = {
   summary: async () => {
-    try { return await apiRequest("/api/dashboard/summary"); }
-    catch { return { totalTravelRequests: 4, pendingRequests: 1, totalBookings: 1, totalEmployees: 4 }; }
+    try {
+      return await apiRequest("/api/dashboard/summary");
+    } catch {
+      // Calculate dynamically for the authenticated user
+      const user = getStoredUser<AuthUser>();
+      const reqs = await travelRequestsApi.list();
+      const bks = await bookingsApi.list();
+
+      const pending = reqs.filter((r) => r.status === "PENDING").length;
+      const approved = reqs.filter((r) => r.status === "APPROVED").length;
+      const booked = reqs.filter((r) => r.status === "BOOKED").length;
+      const completed = reqs.filter((r) => r.status === "COMPLETED").length;
+
+      return {
+        totalTravelRequests: reqs.length,
+        pendingRequests: pending,
+        approvedRequests: approved,
+        bookedRequests: booked,
+        completedRequests: completed,
+        totalBookings: bks.length,
+        totalEmployees: user?.role === "EMPLOYEE" ? 1 : REGISTERED_EMPLOYEES.length,
+      };
+    }
   },
 };
 
@@ -1155,3 +1369,4 @@ export const healthApi = {
 };
 
 export const API_CONFIG = { baseUrl: API_BASE_URL };
+

@@ -103,10 +103,10 @@ function mapRequestStatus(status: string | undefined): Journey["status"] {
 function toJourney(request: BackendRequest): Journey {
   const employee = request.employee || {};
   const dates = request.returnDate ? `${formatRequestDate(request.travelDate)} – ${formatRequestDate(request.returnDate)}` : formatRequestDate(request.travelDate);
-  const empName = employee.name || employee.username || request.passenger || "Arjun Mehta";
-  const empId = employee.employeeId || "EMP-2026";
-  const dept = employee.department || "Engineering";
-  const desig = employee.designation || "Lead Architect";
+  const empName = employee.name || employee.username || request.passenger || "Employee";
+  const empId = employee.employeeId || request.employeeId || "EMP";
+  const dept = employee.department || "General Operations";
+  const desig = employee.designation || "Staff";
   return {
     id: String(request.id),
     destination: request.toLocation || "Destination not provided",
@@ -122,7 +122,7 @@ function toJourney(request: BackendRequest): Journey {
     approvalDate: request.approvalDate,
     reason: request.reason || "Business travel",
     employee: {
-      id: employee.id || 1,
+      id: employee.id || request.userId,
       name: empName,
       employeeId: empId,
       department: dept,
@@ -132,13 +132,49 @@ function toJourney(request: BackendRequest): Journey {
   };
 }
 
-function useTravelRequests(refreshKey = 0) {
+function useTravelRequests(user?: AuthUser | null, refreshKey = 0) {
   const [journeys, setJourneys] = useState<Journey[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  useEffect(() => { let active = true; setLoading(true); setError(""); travelRequestsApi.list().then((data) => { if (active) setJourneys(Array.isArray(data) ? data.map(toJourney) : []); }).catch((requestError) => { if (active) setError(requestError instanceof Error ? requestError.message : "Travel data is unavailable."); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [refreshKey]);
+
+  const activeUser = user || getStoredUser<AuthUser>();
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+
+    travelRequestsApi
+      .list()
+      .then((data) => {
+        if (!active) return;
+        let list = Array.isArray(data) ? data : [];
+        if (activeUser && activeUser.role === "EMPLOYEE") {
+          const uEmpId = String(activeUser.employeeId || "").trim().toLowerCase();
+          const uId = String(activeUser.id);
+          list = list.filter((r: any) => {
+            const rEmpId = String(r.employeeId || r.employee?.employeeId || "").trim().toLowerCase();
+            const rId = String(r.userId || r.employee?.id || "").trim();
+            return (uEmpId && rEmpId && uEmpId === rEmpId) || (uId && rId && uId === rId);
+          });
+        }
+        setJourneys(list.map(toJourney));
+      })
+      .catch((requestError) => {
+        if (active) setError(requestError instanceof Error ? requestError.message : "Travel data is unavailable.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [refreshKey, activeUser?.id, activeUser?.employeeId]);
+
   return { journeys, loading, error };
 }
+
 
 const pageMeta: Record<string, { eyebrow: string; title: string; description?: string }> = {
   "/employee": { eyebrow: "Employee workspace", title: "Overview", description: "Your travel activity, requests and next steps in one place." },
@@ -370,7 +406,7 @@ function EmptyState({ icon, title, description, action }: { icon: ReactNode; tit
 }
 
 function Dashboard({ user }: { user: AuthUser }) {
-  const { journeys, loading } = useTravelRequests();
+  const { journeys, loading } = useTravelRequests(user);
   const upcoming = journeys.find((journey) => journey.status === "Approved" || journey.status === "Booked" || journey.status === "Pending approval");
   const [upcomingBooking, setUpcomingBooking] = useState<any | null>(null);
 
@@ -400,7 +436,7 @@ function Dashboard({ user }: { user: AuthUser }) {
     <section className="stats-grid"><StatCard label="Total trips" value={String(stats.total).padStart(2, "0")} detail="From your account" icon={<Compass size={18} />} /><StatCard label="Upcoming trips" value={String(stats.upcoming).padStart(2, "0")} detail="Approved or booked" icon={<CalendarDays size={18} />} accent="stat-accent" /><StatCard label="Pending requests" value={String(stats.pending).padStart(2, "0")} detail="Needs approval" icon={<Clock3 size={18} />} /><StatCard label="Completed trips" value={String(stats.completed).padStart(2, "0")} detail="From your account" icon={<Check size={18} />} /></section>
     <section className="dashboard-lower-grid"><div className="panel recent-panel"><div className="section-title-row"><div><span className="card-kicker">RECENT ACTIVITY</span><h2 className="section-heading">My journeys</h2></div><Link href="/employee/journeys" className="text-link">View all <ArrowUpRight size={14} /></Link></div><div className="journey-list">{journeys.length ? journeys.slice(0, 3).map((journey) => <JourneyRow key={journey.id} journey={journey} />) : <EmptyState icon={<Compass size={20} />} title={loading ? "Loading journeys" : "No journeys yet"} description={loading ? "Fetching your travel activity." : "Your submitted travel requests will appear here."} />}</div></div><div className="panel status-panel"><div className="section-title-row"><div><span className="card-kicker">REQUEST FLOW</span><h2 className="section-heading">Where things stand</h2></div><Compass size={18} className="panel-icon" /></div><div className="flow-list"><FlowItem label="Pending approval" count={String(stats.pending).padStart(2, "0")} tone="pending" /><FlowItem label="Approved" count={String(journeys.filter((journey) => journey.status === "Approved").length).padStart(2, "0")} tone="approved" /><FlowItem label="Booked" count={String(journeys.filter((journey) => journey.status === "Booked").length).padStart(2, "0")} tone="booked" /><FlowItem label="Completed" count={String(stats.completed).padStart(2, "0")} tone="completed" /></div><Link href="/employee/reports" className="panel-footer-link">See travel reports <ArrowRightIcon /></Link></div></section>
     <div className="mt-4">
-      <ActivityTimeline />
+      <ActivityTimeline journeys={journeys} user={user} />
     </div>
   </div>;
 }
@@ -491,8 +527,9 @@ function DeleteConfirmDialog({
 }
 
 function Journeys() {
+  const user = getStoredUser<AuthUser>();
   const [refreshKey, setRefreshKey] = useState(0);
-  const { journeys, loading, error } = useTravelRequests(refreshKey);
+  const { journeys, loading, error } = useTravelRequests(user, refreshKey);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All journeys");
   const [selected, setSelected] = useState<Journey | null>(null);
@@ -959,9 +996,9 @@ function ApproverRequestDetailsModal({
 
   const emp = journey.employee || {
     name: journey.passenger || "Employee",
-    employeeId: "EMP-2026",
-    department: "Engineering",
-    designation: "Lead Architect",
+    employeeId: "EMP",
+    department: "General Operations",
+    designation: "Employee",
   };
   const isPending = journey.status === "Pending approval";
 
@@ -995,13 +1032,13 @@ function ApproverRequestDetailsModal({
             <h3>{emp.name || journey.passenger}</h3>
             <div className="employee-meta-chips">
               <span className="meta-chip meta-chip-primary">
-                <UserRound size={12} /> ID: {emp.employeeId || "EMP-2026"}
+                <UserRound size={12} /> ID: {emp.employeeId || "EMP"}
               </span>
               <span className="meta-chip">
-                Department: {emp.department || "Engineering"}
+                Department: {emp.department || "General Operations"}
               </span>
               <span className="meta-chip">
-                Designation: {emp.designation || "Lead Architect"}
+                Designation: {emp.designation || "Employee"}
               </span>
             </div>
           </div>
@@ -1220,9 +1257,9 @@ function ApproverBookingDetailModal({
   const { booking, req } = item;
   const emp = req?.employee || {
     name: req?.passenger || "Employee",
-    employeeId: "EMP-2026",
-    department: "Engineering",
-    designation: "Lead Architect",
+    employeeId: "EMP",
+    department: "General Operations",
+    designation: "Employee",
   };
 
   return (
@@ -1513,8 +1550,8 @@ function ApproverBookings() {
                   const req = requestMap.get(String(booking?.travelRequest?.id));
                   const emp = req?.employee || {
                     name: req?.passenger || "Employee",
-                    employeeId: "EMP-2026",
-                    department: "Engineering",
+                    employeeId: "EMP",
+                    department: "General Operations",
                   };
                   return (
                     <tr key={booking.id}>
@@ -1611,12 +1648,12 @@ function ApproverBookings() {
 
 function Approvals({ history = false }: { history?: boolean }) {
   const [refreshKey, setRefreshKey] = useState(0);
-  const { journeys, loading, error } = useTravelRequests(refreshKey);
+  const user = getStoredUser<AuthUser>();
+  const { journeys, loading, error } = useTravelRequests(user, refreshKey);
   const [working, setWorking] = useState<string | null>(null);
   const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null);
   const [confirmation, setConfirmation] = useState<{ journey: Journey; action: "approve" | "reject" } | null>(null);
   const [confirmClearHistory, setConfirmClearHistory] = useState(false);
-  const user = getStoredUser<AuthUser>();
 
   async function decide(journey: Journey, action: "approve" | "reject") {
     setWorking(`${action}-${journey.id}`);
@@ -1678,7 +1715,7 @@ function Approvals({ history = false }: { history?: boolean }) {
         ) : rows.length ? (
           <div className="approval-list">
             {rows.map((request) => {
-              const emp = request.employee || { name: request.passenger, employeeId: "EMP-2026", department: "Engineering", designation: "Lead Architect" };
+              const emp = request.employee || { name: request.passenger || "Employee", employeeId: "EMP", department: "General Operations", designation: "Employee" };
               return (
                 <div className="approval-item approval-item-rich" key={request.id}>
                   <div className="approval-identity">
@@ -1811,10 +1848,11 @@ function ConfirmDialog({ action, onClose, onConfirm }: { action: "approve" | "re
 }
 
 function TravelDesk() {
+  const user = getStoredUser<AuthUser>();
   const [location] = useLocation();
   const cancellationsMode = location === "/travel-desk/cancellations";
   const [refreshKey, setRefreshKey] = useState(0);
-  const { journeys, loading, error } = useTravelRequests(refreshKey);
+  const { journeys, loading, error } = useTravelRequests(user, refreshKey);
   const [bookingRecords, setBookingRecords] = useState<any[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingError, setBookingError] = useState("");
@@ -1936,10 +1974,10 @@ function TravelDesk() {
                       const isPending = row.status === "Pending approval";
                       const isBooked = row.status === "Booked";
                       const emp = row.employee || {
-                        name: row.passenger,
-                        employeeId: "EMP-2026",
-                        department: "Engineering",
-                        designation: "Lead Architect",
+                        name: row.passenger || "Employee",
+                        employeeId: "EMP",
+                        department: "General Operations",
+                        designation: "Employee",
                       };
 
                       return (
@@ -2086,10 +2124,10 @@ function BookingDialog({ journey, onClose, onSubmit }: { journey: Journey; onClo
   }
 
   const emp = journey.employee || {
-    name: journey.passenger,
-    employeeId: "EMP-2026",
-    department: "Engineering",
-    designation: "Lead Architect",
+    name: journey.passenger || "Employee",
+    employeeId: "EMP",
+    department: "General Operations",
+    designation: "Employee",
   };
 
   return (
@@ -2115,13 +2153,13 @@ function BookingDialog({ journey, onClose, onSubmit }: { journey: Journey; onClo
             <h3>{emp.name || journey.passenger}</h3>
             <div className="employee-meta-chips">
               <span className="meta-chip meta-chip-primary">
-                <UserRound size={12} /> ID: {emp.employeeId || "EMP-2026"}
+                <UserRound size={12} /> ID: {emp.employeeId || "EMP"}
               </span>
               <span className="meta-chip">
-                Department: {emp.department || "Engineering"}
+                Department: {emp.department || "General Operations"}
               </span>
               <span className="meta-chip">
-                Designation: {emp.designation || "Lead Architect"}
+                Designation: {emp.designation || "Employee"}
               </span>
             </div>
           </div>
@@ -2357,7 +2395,8 @@ function BookingEditDialog({ booking, onClose, onSubmit }: { booking: any; onClo
 function CancellationDialog({ booking, onClose, onSubmit }: { booking: any; onClose: () => void; onSubmit: (id: string, reason: string, charge: number) => Promise<void> }) { const [submitting, setSubmitting] = useState(false); const [error, setError] = useState(""); async function submit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); const reason = String(form.get("reason") || "").trim(); const charge = Number(form.get("cancellationCharge") || 0); if (!reason || !Number.isFinite(charge) || charge < 0) { setError("A cancellation reason and valid non-negative charge are required."); return; } setSubmitting(true); setError(""); try { await onSubmit(String(booking.id), reason, charge); } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "We couldn't cancel this booking."); } finally { setSubmitting(false); } } return <div className="modal-overlay" role="dialog" aria-modal="true"><div className="confirm-dialog cancellation-dialog"><button className="icon-button dialog-close" onClick={onClose} aria-label="Close cancellation dialog"><X size={18} /></button><div className="confirm-icon reject"><XCircle size={22} /></div><span className="card-kicker">CANCEL BOOKING</span><h2>Cancel {booking.bookingReference || "this booking"}?</h2><p>This action updates the real backend booking record and cannot be repeated once cancelled.</p><form className="booking-form" onSubmit={submit}><label className="field"><span>Cancellation reason *</span><textarea name="reason" rows={3} required placeholder="Why is this booking being cancelled?" /></label><label className="field"><span>Cancellation charge</span><input name="cancellationCharge" type="number" min="0" step="0.01" defaultValue="0" /></label>{error && <div className="form-error-message"><XCircle size={15} />{error}</div>}<div className="dialog-actions"><button type="button" className="button button-ghost" onClick={onClose}>Keep booking</button><button type="submit" className="button button-danger" disabled={submitting}>{submitting ? "Cancelling…" : "Cancel booking"}</button></div></form></div></div>; }
 
 function Reports() {
-  const { journeys, loading } = useTravelRequests();
+  const user = getStoredUser<AuthUser>();
+  const { journeys, loading } = useTravelRequests(user);
   const counts = { approved: journeys.filter((j) => j.status === "Approved").length, pending: journeys.filter((j) => j.status === "Pending approval").length, completed: journeys.filter((j) => j.status === "Completed").length };
   const destinations = Array.from(new Set(journeys.map((j) => j.destination))).slice(0, 4);
   return <div className="page-stack animate-page"><PageTitle meta={pageMeta["/employee/reports"]} /><div className="report-header"><div><span className="card-kicker">LIVE TRAVEL DATA</span><h2>Patterns that help you plan ahead.</h2><p>These signals are calculated from the travel requests returned for your authenticated account.</p></div><div className="report-period"><CalendarDays size={16} /> Current account</div></div><section className="stats-grid"><StatCard label="Total requests" value={String(journeys.length).padStart(2, "0")} detail={loading ? "Loading" : "From backend"} icon={<FileText size={18} />} /><StatCard label="Approved" value={String(counts.approved).padStart(2, "0")} detail="Current status" icon={<Check size={18} />} accent="stat-accent" /><StatCard label="Pending" value={String(counts.pending).padStart(2, "0")} detail="Needs approval" icon={<Clock3 size={18} />} /><StatCard label="Completed" value={String(counts.completed).padStart(2, "0")} detail="Current status" icon={<Compass size={18} />} /></section><InteractiveRouteMap /><section className="report-grid"><div className="panel destination-panel"><div className="section-title-row"><div><span className="card-kicker">DESTINATIONS</span><h2 className="section-heading">Where work takes you</h2></div><Compass size={18} className="panel-icon" /></div>{destinations.length ? <div className="destination-list">{destinations.map((destination, index) => <Destination key={destination} name={destination} count={`${journeys.filter((j) => j.destination === destination).length} request${journeys.filter((j) => j.destination === destination).length === 1 ? "" : "s"}`} width={`${86 - index * 17}%`} />)}</div> : <EmptyState icon={<Compass size={20} />} title="No destination data yet" description="Submit a travel request to build your report." />}</div><div className="panel insight-card"><div className="insight-symbol"><Sparkles size={18} /></div><div><span className="card-kicker">TRAVORA SIGNAL</span><h3>{loading ? "Loading your travel signal" : journeys.length ? "Keep the request context close." : "Your first request starts the signal."}</h3><p>{loading ? "Fetching the latest request activity." : journeys.length ? "Approval and booking teams can use the same request record to keep the handoff clear." : "Create a request to see destinations, statuses and travel patterns here."}</p></div></div></section></div>;
@@ -2982,7 +3021,8 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
 }
 
 function TravelCalendarPage() {
-  const { journeys } = useTravelRequests();
+  const user = getStoredUser<AuthUser>();
+  const { journeys } = useTravelRequests(user);
   const [, setLocation] = useLocation();
   return (
     <div className="page-stack animate-page">
@@ -2993,12 +3033,13 @@ function TravelCalendarPage() {
 }
 
 function ExpensesPage() {
-  const { journeys } = useTravelRequests();
-  return <Expenses journeys={journeys} />;
+  const user = getStoredUser<AuthUser>();
+  const { journeys } = useTravelRequests(user);
+  return <Expenses user={user} journeys={journeys} />;
 }
 
 function ProfilePage({ user }: { user: AuthUser }) {
-  const { journeys } = useTravelRequests();
+  const { journeys } = useTravelRequests(user);
   return <Profile user={user} journeys={journeys} />;
 }
 

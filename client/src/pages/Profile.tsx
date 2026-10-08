@@ -14,31 +14,35 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { AuthUser } from "../lib/api";
+import { REGISTERED_EMPLOYEES, type AuthUser } from "../lib/api";
 import type { Journey, UserProfile } from "../types";
 
 export function Profile({ user, journeys = [] }: { user: AuthUser; journeys?: Journey[] }) {
+  const regEmp = REGISTERED_EMPLOYEES.find(
+    (e) => e.employeeNumber.toLowerCase() === String(user.employeeId || "").toLowerCase()
+  );
+
   const defaultProfile: UserProfile = {
-    id: String(user.id || "USR-2026"),
-    name: user.username || "Travora Traveler",
-    email: `${user.username?.toLowerCase().replace(/\s+/g, ".") || "employee"}@travora.internal`,
+    id: String(user.id || "USR"),
+    name: regEmp?.fullName || user.username || "Travora Traveler",
+    email: regEmp?.workEmail || `${user.username?.toLowerCase().replace(/\s+/g, ".") || "employee"}@mahathiinfra.com`,
     role: user.role,
-    employeeId: user.employeeId || "EMP-8849",
-    department: "Enterprise Solutions & Architecture",
-    designation: "Senior Lead Specialist",
+    employeeId: user.employeeId || "EMP",
+    department: regEmp?.department || "General Operations",
+    designation: regEmp?.designation || "Employee",
     phone: "+91 98765 43210",
-    officeLocation: "Bengaluru Technology Campus, India",
+    officeLocation: "Corporate Headquarters, India",
     emergencyContact: {
-      name: "Priya Sharma",
-      relation: "Spouse",
+      name: "Corporate Helpdesk",
+      relation: "Internal Support",
       phone: "+91 98765 01234",
     },
     travelPreferences: {
       seatPreference: "Window",
       mealPreference: "Vegetarian",
-      preferredAirlines: ["Air India", "Singapore Airlines", "Emirates"],
-      hotelLoyalty: "Marriott Bonvoy #8942-108",
-      frequentFlyerNo: "AI-FLYER-94812",
+      preferredAirlines: ["IndiGo", "Air India", "Vistara"],
+      hotelLoyalty: "Corporate Member",
+      frequentFlyerNo: "",
     },
   };
 

@@ -84,13 +84,18 @@ const CATEGORY_ICONS: Record<string, any> = {
   Other: Receipt,
 };
 
-export function Expenses({ journeys = [] }: { journeys?: Journey[] }) {
+import type { AuthUser } from "../lib/api";
+
+export function Expenses({ journeys = [], user }: { journeys?: Journey[]; user?: AuthUser | null }) {
+  const userKey = user?.employeeId || (user?.id ? String(user.id) : "guest");
+  const storageKey = `travora_expenses_${userKey}`;
+
   const [expenses, setExpenses] = useState<Expense[]>(() => {
     try {
-      const saved = localStorage.getItem("travora_expenses");
+      const saved = localStorage.getItem(storageKey);
       if (saved) return JSON.parse(saved);
     } catch {}
-    return INITIAL_EXPENSES;
+    return [];
   });
 
   const [query, setQuery] = useState("");
@@ -109,8 +114,8 @@ export function Expenses({ journeys = [] }: { journeys?: Journey[] }) {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    localStorage.setItem("travora_expenses", JSON.stringify(expenses));
-  }, [expenses]);
+    localStorage.setItem(storageKey, JSON.stringify(expenses));
+  }, [expenses, storageKey]);
 
   const stats = useMemo(() => {
     const totalClaimed = expenses.reduce((sum, item) => sum + item.amount, 0);
