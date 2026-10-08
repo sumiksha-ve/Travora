@@ -41,12 +41,39 @@ public class BookingService {
     }
 
     public List<Booking> getAllBookings() {
+        User currentUser = getCurrentUser();
+
+        if (currentUser.getRole() == Role.EMPLOYEE) {
+            Employee employee = getEmployeeForUser(currentUser);
+            // Only return bookings whose travel request belongs to this employee
+            return bookingRepository.findAll().stream()
+                    .filter(b -> b.getTravelRequest() != null
+                            && b.getTravelRequest().getEmployee() != null
+                            && b.getTravelRequest().getEmployee().getId().equals(employee.getId()))
+                    .toList();
+        }
+
         return bookingRepository.findAll();
     }
 
     public Booking getBookingById(Long id) {
-        return bookingRepository.findById(id)
+        Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Booking not found"));
+
+        User currentUser = getCurrentUser();
+        if (currentUser.getRole() == Role.EMPLOYEE) {
+            Employee employee = getEmployeeForUser(currentUser);
+            if (booking.getTravelRequest() == null
+                    || booking.getTravelRequest().getEmployee() == null
+                    || !booking.getTravelRequest().getEmployee().getId().equals(employee.getId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "You can only access your own bookings"
+                );
+            }
+        }
+
+        return booking;
     }
 
     public List<Booking> getBookingsByTravelRequest(Long travelRequestId) {

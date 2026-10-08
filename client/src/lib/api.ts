@@ -610,18 +610,83 @@ export function persistAuth(user: AuthUser) {
   if (!user.token) throw new Error("Cannot create an authenticated session without a JWT.");
   window.localStorage.setItem("travora_token", user.token);
   window.localStorage.setItem("travora_user", JSON.stringify({ id: user.id, username: user.username, role: user.role, employeeId: user.employeeId ?? null }));
+  // Migrate any legacy global data to this user's namespace
+  _migrateGlobalDataToUser();
 }
 
-const LOCAL_REQUESTS_KEY = "travora_local_requests";
-const LOCAL_BOOKINGS_KEY = "travora_local_bookings";
-const DELETED_REQUESTS_KEY = "travora_deleted_requests";
-const DELETED_BOOKINGS_KEY = "travora_deleted_bookings";
-const ALL_WIPED_KEY = "travora_all_wiped";
+/**
+ * One-time migration: if old global (non-namespaced) localStorage keys exist,
+ * copy that data into the current user's namespace and remove the old keys.
+ * This prevents data loss for users who had data before the isolation fix.
+ */
+function _migrateGlobalDataToUser() {
+  if (!isBrowser) return;
+  const LEGACY_KEYS = [
+    "travora_local_requests",
+    "travora_local_bookings",
+    "travora_deleted_requests",
+    "travora_deleted_bookings",
+    "travora_all_wiped",
+  ];
+  const hasMigrated = window.localStorage.getItem("travora_migration_done");
+  if (hasMigrated) return;
+
+  for (const key of LEGACY_KEYS) {
+    const val = window.localStorage.getItem(key);
+    if (val !== null) {
+      const nsKey = userKey(key);
+      // Only migrate if the user doesn't already have data under the new key
+      if (window.localStorage.getItem(nsKey) === null) {
+        window.localStorage.setItem(nsKey, val);
+      }
+      window.localStorage.removeItem(key);
+    }
+  }
+  window.localStorage.setItem("travora_migration_done", "true");
+}
+
+/**
+ * ─── USER-NAMESPACED localStorage ───
+ *
+ * Every localStorage key is prefixed with the currently authenticated
+ * user's employeeId (or numeric id as fallback) so that each user has
+ * a completely isolated data store.  If no user is logged in the keys
+ * fall back to a shared "__anon__" namespace – but that should never
+ * happen because the UI gates all data access behind authentication.
+ */
+
+function _userPrefix(): string {
+  const user = getStoredUser();
+  if (user?.employeeId) return user.employeeId;
+  if (user?.id) return String(user.id);
+  return "__anon__";
+}
+
+function userKey(base: string): string {
+  return `${base}_${_userPrefix()}`;
+}
+
+/* Demo data is only shown to the user whose employee ID matches the
+   hardcoded employee inside DEMO_REQUESTS (EMP-2026 / Arjun Mehta).
+   All other users start with an empty slate. */
+function _demoRequestsForCurrentUser(): any[] {
+  const user = getStoredUser();
+  if (!user) return [];
+  // Only the legacy demo employee sees demo requests
+  if (user.employeeId === "EMP-2026" || user.id === 1) return DEMO_REQUESTS;
+  return [];
+}
+function _demoBookingsForCurrentUser(): any[] {
+  const user = getStoredUser();
+  if (!user) return [];
+  if (user.employeeId === "EMP-2026" || user.id === 1) return DEMO_BOOKINGS;
+  return [];
+}
 
 export function getDeletedRequestIds(): Set<string> {
   if (!isBrowser) return new Set();
   try {
-    const raw = window.localStorage.getItem(DELETED_REQUESTS_KEY);
+    const raw = window.localStorage.getItem(userKey("travora_deleted_requests"));
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) return new Set(arr.map(String));
@@ -639,7 +704,7 @@ export function markRequestIdsDeleted(ids: Array<string | number>) {
     ids.forEach((id) => {
       if (id !== undefined && id !== null) set.add(String(id));
     });
-    window.localStorage.setItem(DELETED_REQUESTS_KEY, JSON.stringify(Array.from(set)));
+    window.localStorage.setItem(userKey("travora_deleted_requests"), JSON.stringify(Array.from(set)));
   } catch (e) {
     console.warn("Failed to save deleted request ids", e);
   }
@@ -648,7 +713,7 @@ export function markRequestIdsDeleted(ids: Array<string | number>) {
 export function getDeletedBookingIds(): Set<string> {
   if (!isBrowser) return new Set();
   try {
-    const raw = window.localStorage.getItem(DELETED_BOOKINGS_KEY);
+    const raw = window.localStorage.getItem(userKey("travora_deleted_bookings"));
     if (raw) {
       const arr = JSON.parse(raw);
       if (Array.isArray(arr)) return new Set(arr.map(String));
@@ -666,20 +731,20 @@ export function markBookingIdsDeleted(ids: Array<string | number>) {
     ids.forEach((id) => {
       if (id !== undefined && id !== null) set.add(String(id));
     });
-    window.localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
+    window.localStorage.setItem(userKey("travora_deleted_bookings"), JSON.stringify(Array.from(set)));
   } catch (e) {
     console.warn("Failed to save deleted booking ids", e);
   }
 }
 
 export function getLocalRequests(): any[] {
-  if (!isBrowser) return DEMO_REQUESTS;
-  if (window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+  if (!isBrowser) return [];
+  if (window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
     return [];
   }
   const deletedIds = getDeletedRequestIds();
   try {
-    const raw = window.localStorage.getItem(LOCAL_REQUESTS_KEY);
+    const raw = window.localStorage.getItem(userKey("travora_local_requests"));
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -689,26 +754,26 @@ export function getLocalRequests(): any[] {
   } catch (e) {
     console.warn("Failed to load local requests", e);
   }
-  return DEMO_REQUESTS.filter((r) => !deletedIds.has(String(r.id)));
+  return _demoRequestsForCurrentUser().filter((r) => !deletedIds.has(String(r.id)));
 }
 
 export function saveLocalRequests(requests: any[]) {
   try {
-    window.localStorage.setItem(LOCAL_REQUESTS_KEY, JSON.stringify(requests));
+    window.localStorage.setItem(userKey("travora_local_requests"), JSON.stringify(requests));
   } catch (e) {
     console.warn("Failed to save local requests", e);
   }
 }
 
 export function getLocalBookings(): any[] {
-  if (!isBrowser) return DEMO_BOOKINGS;
-  if (window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+  if (!isBrowser) return [];
+  if (window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
     return [];
   }
   const deletedReqIds = getDeletedRequestIds();
   const deletedBookingIds = getDeletedBookingIds();
   try {
-    const raw = window.localStorage.getItem(LOCAL_BOOKINGS_KEY);
+    const raw = window.localStorage.getItem(userKey("travora_local_bookings"));
     if (raw !== null) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
@@ -720,14 +785,14 @@ export function getLocalBookings(): any[] {
   } catch (e) {
     console.warn("Failed to load local bookings", e);
   }
-  return DEMO_BOOKINGS.filter(
+  return _demoBookingsForCurrentUser().filter(
     (b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id))
   );
 }
 
 export function saveLocalBookings(bookings: any[]) {
   try {
-    window.localStorage.setItem(LOCAL_BOOKINGS_KEY, JSON.stringify(bookings));
+    window.localStorage.setItem(userKey("travora_local_bookings"), JSON.stringify(bookings));
   } catch (e) {
     console.warn("Failed to save local bookings", e);
   }
@@ -735,7 +800,7 @@ export function saveLocalBookings(bookings: any[]) {
 
 export const travelRequestsApi = {
   list: async () => {
-    if (isBrowser && window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+    if (isBrowser && window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
       return [];
     }
     const deleted = getDeletedRequestIds();
@@ -762,9 +827,12 @@ export const travelRequestsApi = {
   },
   create: async (payload: unknown) => {
     if (isBrowser) {
-      window.localStorage.removeItem(ALL_WIPED_KEY);
+      window.localStorage.removeItem(userKey("travora_all_wiped"));
     }
     const user = getStoredUser();
+    const regEmp = REGISTERED_EMPLOYEES.find(
+      (e) => e.employeeNumber === user?.employeeId
+    );
     const newReq = {
       id: `TR-${Math.floor(Math.random() * 9000 + 1000)}`,
       ...(payload as object),
@@ -772,10 +840,10 @@ export const travelRequestsApi = {
       createdAt: new Date().toISOString(),
       employee: {
         id: user?.id || 1,
-        name: user?.username || "Arjun Mehta",
-        employeeId: user?.employeeId || "EMP-2026",
-        department: "Engineering",
-        designation: "Lead Architect",
+        name: regEmp?.fullName || user?.username || "Unknown Employee",
+        employeeId: user?.employeeId || "UNKNOWN",
+        department: regEmp?.department || "General",
+        designation: regEmp?.designation || "Employee",
       },
     };
     const current = getLocalRequests();
@@ -850,14 +918,14 @@ export const travelRequestsApi = {
   },
   deleteAll: async () => {
     if (isBrowser) {
-      window.localStorage.setItem(ALL_WIPED_KEY, "true");
+      window.localStorage.setItem(userKey("travora_all_wiped"), "true");
     }
     const currentReqs = getLocalRequests();
     const currentBookings = getLocalBookings();
     markRequestIdsDeleted(currentReqs.map((r) => r.id));
     markBookingIdsDeleted(currentBookings.map((b) => b.id));
-    markRequestIdsDeleted(DEMO_REQUESTS.map((r) => r.id));
-    markBookingIdsDeleted(DEMO_BOOKINGS.map((b) => b.id));
+    markRequestIdsDeleted(_demoRequestsForCurrentUser().map((r) => r.id));
+    markBookingIdsDeleted(_demoBookingsForCurrentUser().map((b) => b.id));
 
     saveLocalRequests([]);
     saveLocalBookings([]);
@@ -919,19 +987,19 @@ export const travelRequestsApi = {
   },
   resetDemo: async () => {
     if (isBrowser) {
-      window.localStorage.removeItem(ALL_WIPED_KEY);
-      window.localStorage.removeItem(DELETED_REQUESTS_KEY);
-      window.localStorage.removeItem(DELETED_BOOKINGS_KEY);
+      window.localStorage.removeItem(userKey("travora_all_wiped"));
+      window.localStorage.removeItem(userKey("travora_deleted_requests"));
+      window.localStorage.removeItem(userKey("travora_deleted_bookings"));
     }
-    saveLocalRequests(DEMO_REQUESTS);
-    saveLocalBookings(DEMO_BOOKINGS);
+    saveLocalRequests(_demoRequestsForCurrentUser());
+    saveLocalBookings(_demoBookingsForCurrentUser());
     return { success: true };
   },
 };
 
 export const bookingsApi = {
   list: async () => {
-    if (isBrowser && window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+    if (isBrowser && window.localStorage.getItem(userKey("travora_all_wiped")) === "true") {
       return [];
     }
     const deletedReqIds = getDeletedRequestIds();
@@ -966,7 +1034,7 @@ export const bookingsApi = {
   },
   create: async (payload: any) => {
     if (isBrowser) {
-      window.localStorage.removeItem(ALL_WIPED_KEY);
+      window.localStorage.removeItem(userKey("travora_all_wiped"));
     }
     const reqId = payload.travelRequest?.id;
     const req = getLocalRequests().find((r) => String(r.id) === String(reqId)) || { id: reqId };

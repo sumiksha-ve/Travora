@@ -312,7 +312,7 @@ function Topbar({ onMenu, onOpenSearch, meta, user }: { onMenu: () => void; onOp
           <div className="avatar avatar-small">{initials}</div>
           <div className="topbar-user-copy">
             <strong>{user.username}</strong>
-            <span>{roleLabels[user.role]}</span>
+            <span className={`role-pill role-pill-${user.role.toLowerCase()}`}>{roleLabels[user.role]}</span>
           </div>
           <ChevronDown size={15} className="muted-icon" />
         </Link>
@@ -2901,9 +2901,28 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
             <em>Work better.</em>
           </h1>
           <p>One calm workspace for every business journey — from the first request to the flight home.</p>
+          <div className="login-feature-preview">
+            <div className="login-feature-preview-row">
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
+                <Plane size={15} style={{ color: "var(--saffron)" }} /> BLR ➔ BOM
+              </span>
+              <span className="preview-badge-green">
+                <Check size={12} /> Policy Approved
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+              <span style={{ color: "var(--ink-soft)", fontWeight: 500 }}>IndiGo 6E-204 · Premium Economy</span>
+              <span style={{ color: "var(--ink-muted)", fontSize: 11 }}>08:30 AM IST</span>
+            </div>
+          </div>
+          <div className="login-trust-tags">
+            <span className="login-trust-tag"><ShieldCheck size={13} style={{ color: "var(--green)" }} /> Isolated Workspaces</span>
+            <span className="login-trust-tag"><Sparkles size={13} style={{ color: "var(--saffron)" }} /> Role-Based Access</span>
+            <span className="login-trust-tag"><Clock3 size={13} style={{ color: "var(--blue)" }} /> Live Desk Queue</span>
+          </div>
           <div className="login-story-footer">
             <div className="story-line" />
-            <span>Authorized company access</span>
+            <span>Authorized enterprise company access</span>
           </div>
         </div>
         <div className="login-card">

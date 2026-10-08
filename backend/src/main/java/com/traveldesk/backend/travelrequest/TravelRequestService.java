@@ -271,16 +271,42 @@ public class TravelRequestService {
     }
 
     public void deleteTravelRequest(Long id) {
-        if (!travelRequestRepository.existsById(id)) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "Travel request not found"
-            );
+        TravelRequest travelRequest =
+                travelRequestRepository.findById(id)
+                        .orElseThrow(() ->
+                                new ResponseStatusException(
+                                        HttpStatus.NOT_FOUND,
+                                        "Travel request not found"
+                                )
+                        );
+
+        User user = getCurrentUser();
+
+        if (user.getRole() == com.traveldesk.backend.auth.Role.EMPLOYEE) {
+            Employee employee = getEmployeeForUser(user);
+            if (!travelRequest.getEmployee()
+                    .getId()
+                    .equals(employee.getId())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "You can only delete your own travel requests"
+                );
+            }
         }
+
         travelRequestRepository.deleteById(id);
     }
 
     public void deleteAllTravelRequests() {
-        travelRequestRepository.deleteAll();
+        User user = getCurrentUser();
+
+        if (user.getRole() == com.traveldesk.backend.auth.Role.EMPLOYEE) {
+            Employee employee = getEmployeeForUser(user);
+            List<TravelRequest> ownRequests =
+                    travelRequestRepository.findByEmployeeId(employee.getId());
+            travelRequestRepository.deleteAll(ownRequests);
+        } else {
+            travelRequestRepository.deleteAll();
+        }
     }
 }
