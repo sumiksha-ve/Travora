@@ -1,6 +1,13 @@
-const isBrowser = typeof window !== "undefined";
-const isLocal = isBrowser && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (isLocal ? "http://localhost:8080" : "");
+function hasStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+const isLocal =
+  typeof window !== "undefined" &&
+  (window.location?.hostname === "localhost" || window.location?.hostname === "127.0.0.1");
+const API_BASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
+  (isLocal ? "http://localhost:8080" : "");
 
 export type Role = "EMPLOYEE" | "APPROVER" | "TRAVEL_DESK" | "ADMIN";
 export type AuthUser = { id: number; username: string; role: Role; employeeId?: string | null; token?: string };
@@ -549,7 +556,7 @@ export function persistAuth(user: AuthUser) {
  * TR-9021..9024, Singapore/Delhi mock records) that contaminated users' localStorage.
  */
 function _sanitizeLocalStorage() {
-  if (!isBrowser) return;
+  if (!hasStorage()) return;
   try {
     const SANITIZE_VERSION = "travora_v4_clean";
     if (window.localStorage.getItem(SANITIZE_VERSION) === "true") return;
@@ -623,7 +630,7 @@ const DELETED_REQUESTS_KEY = "travora_deleted_request_ids";
 const DELETED_BOOKINGS_KEY = "travora_deleted_booking_ids";
 
 export function getDeletedRequestIds(): Set<string> {
-  if (!isBrowser) return new Set();
+  if (!hasStorage()) return new Set();
   try {
     const raw = window.localStorage.getItem(DELETED_REQUESTS_KEY);
     if (raw) {
@@ -637,7 +644,7 @@ export function getDeletedRequestIds(): Set<string> {
 }
 
 export function markRequestIdsDeleted(ids: Array<string | number>) {
-  if (!isBrowser) return;
+  if (!hasStorage()) return;
   try {
     const set = getDeletedRequestIds();
     ids.forEach((id) => {
@@ -650,7 +657,7 @@ export function markRequestIdsDeleted(ids: Array<string | number>) {
 }
 
 export function getDeletedBookingIds(): Set<string> {
-  if (!isBrowser) return new Set();
+  if (!hasStorage()) return new Set();
   try {
     const raw = window.localStorage.getItem(DELETED_BOOKINGS_KEY);
     if (raw) {
@@ -664,7 +671,7 @@ export function getDeletedBookingIds(): Set<string> {
 }
 
 export function markBookingIdsDeleted(ids: Array<string | number>) {
-  if (!isBrowser) return;
+  if (!hasStorage()) return;
   try {
     const set = getDeletedBookingIds();
     ids.forEach((id) => {
@@ -677,7 +684,7 @@ export function markBookingIdsDeleted(ids: Array<string | number>) {
 }
 
 function _getAllSystemRequests(): any[] {
-  if (!isBrowser) return [];
+  if (!hasStorage()) return [];
   const deletedIds = getDeletedRequestIds();
   try {
     const raw = window.localStorage.getItem(SYSTEM_REQUESTS_KEY);
@@ -694,7 +701,7 @@ function _getAllSystemRequests(): any[] {
 }
 
 function _saveAllSystemRequests(requests: any[]) {
-  if (!isBrowser) return;
+  if (!hasStorage()) return;
   try {
     window.localStorage.setItem(SYSTEM_REQUESTS_KEY, JSON.stringify(requests));
   } catch (e) {
@@ -703,7 +710,7 @@ function _saveAllSystemRequests(requests: any[]) {
 }
 
 function _getAllSystemBookings(): any[] {
-  if (!isBrowser) return [];
+  if (!hasStorage()) return [];
   const deletedBookingIds = getDeletedBookingIds();
   const deletedReqIds = getDeletedRequestIds();
   try {
@@ -723,7 +730,7 @@ function _getAllSystemBookings(): any[] {
 }
 
 function _saveAllSystemBookings(bookings: any[]) {
-  if (!isBrowser) return;
+  if (!hasStorage()) return;
   try {
     window.localStorage.setItem(SYSTEM_BOOKINGS_KEY, JSON.stringify(bookings));
   } catch (e) {
@@ -732,7 +739,7 @@ function _saveAllSystemBookings(bookings: any[]) {
 }
 
 function _getAllSystemNotifications(): any[] {
-  if (!isBrowser) return [];
+  if (!hasStorage()) return [];
   try {
     const raw = window.localStorage.getItem(SYSTEM_NOTIFICATIONS_KEY);
     if (raw) {
@@ -746,7 +753,7 @@ function _getAllSystemNotifications(): any[] {
 }
 
 function _saveAllSystemNotifications(notifs: any[]) {
-  if (!isBrowser) return;
+  if (!hasStorage()) return;
   try {
     window.localStorage.setItem(SYSTEM_NOTIFICATIONS_KEY, JSON.stringify(notifs));
   } catch (e) {
