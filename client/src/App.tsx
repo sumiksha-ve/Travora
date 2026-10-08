@@ -2901,20 +2901,6 @@ function Login({ onAuthenticated }: { onAuthenticated: (user: AuthUser) => void 
             <em>Work better.</em>
           </h1>
           <p>One calm workspace for every business journey — from the first request to the flight home.</p>
-          <div className="login-feature-preview">
-            <div className="login-feature-preview-row">
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 700, fontSize: 13, color: "var(--ink)" }}>
-                <Plane size={15} style={{ color: "var(--saffron)" }} /> BLR ➔ BOM
-              </span>
-              <span className="preview-badge-green">
-                <Check size={12} /> Policy Approved
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
-              <span style={{ color: "var(--ink-soft)", fontWeight: 500 }}>IndiGo 6E-204 · Premium Economy</span>
-              <span style={{ color: "var(--ink-muted)", fontSize: 11 }}>08:30 AM IST</span>
-            </div>
-          </div>
           <div className="login-trust-tags">
             <span className="login-trust-tag"><ShieldCheck size={13} style={{ color: "var(--green)" }} /> Isolated Workspaces</span>
             <span className="login-trust-tag"><Sparkles size={13} style={{ color: "var(--saffron)" }} /> Role-Based Access</span>
