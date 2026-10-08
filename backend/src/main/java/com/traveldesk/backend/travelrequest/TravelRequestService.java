@@ -269,4 +269,18 @@ public class TravelRequestService {
                         )
                 );
     }
+
+    public void deleteTravelRequest(Long id) {
+        if (!travelRequestRepository.existsById(id)) {
+            throw new ResponseStatusException(
+                    HttpStatus.NOT_FOUND,
+                    "Travel request not found"
+            );
+        }
+        travelRequestRepository.deleteById(id);
+    }
+
+    public void deleteAllTravelRequests() {
+        travelRequestRepository.deleteAll();
+    }
 }

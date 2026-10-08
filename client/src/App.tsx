@@ -474,9 +474,11 @@ function DeleteConfirmDialog({
               setLoading(true);
               try {
                 await onConfirm();
+                onClose();
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Action failed. Please try again.");
               } finally {
                 setLoading(false);
-                onClose();
               }
             }}
           >
@@ -494,10 +496,26 @@ function Journeys() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All journeys");
   const [selected, setSelected] = useState<Journey | null>(null);
+  const [deletingJourney, setDeletingJourney] = useState<Journey | null>(null);
   const [bookingsByRequest, setBookingsByRequest] = useState<Record<string, any | null>>({});
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookingError, setBookingError] = useState("");
   const [confirmClearPast, setConfirmClearPast] = useState(false);
+
+  // Auto-open journey if ?journey=ID is present in URL
+  useEffect(() => {
+    if (!journeys.length) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const targetId = params.get("journey");
+      if (targetId) {
+        const found = journeys.find((j) => String(j.id) === String(targetId));
+        if (found) setSelected(found);
+      }
+    } catch {
+      // URL parsing fallback
+    }
+  }, [journeys]);
 
   useEffect(() => {
     let active = true;
@@ -636,16 +654,29 @@ function Journeys() {
                     <td>{journey.project}</td>
                     <td><StatusBadge status={journey.status} /></td>
                     <td>
-                      <button
-                        type="button"
-                        className="table-action"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setSelected(journey);
-                        }}
-                      >
-                        {bookingsByRequest[journey.id] ? "View booking" : "View details"} <ArrowUpRight size={14} />
-                      </button>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <button
+                          type="button"
+                          className="table-action"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelected(journey);
+                          }}
+                        >
+                          {bookingsByRequest[journey.id] ? "View booking" : "View details"} <ArrowUpRight size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="table-action table-action-danger"
+                          title="Delete journey"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeletingJourney(journey);
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -678,6 +709,19 @@ function Journeys() {
           confirmLabel="Clear past trips"
           onConfirm={handleClearPast}
           onClose={() => setConfirmClearPast(false)}
+        />
+      )}
+      {deletingJourney && (
+        <DeleteConfirmDialog
+          title={`Delete journey #${deletingJourney.id}?`}
+          description={`Permanently remove journey to ${deletingJourney.destination} (${deletingJourney.project}) and any linked booking?`}
+          confirmLabel="Delete journey"
+          onConfirm={async () => {
+            await travelRequestsApi.delete(deletingJourney.id);
+            toast.success(`Journey #${deletingJourney.id} deleted.`);
+            setRefreshKey((k) => k + 1);
+          }}
+          onClose={() => setDeletingJourney(null)}
         />
       )}
     </div>
@@ -871,8 +915,8 @@ function JourneyDrawer({ journey, onClose, onDeleted }: { journey: Journey; onCl
           onConfirm={async () => {
             await travelRequestsApi.delete(journey.id);
             toast.success(`Journey #${journey.id} deleted.`);
-            onClose();
             if (onDeleted) onDeleted();
+            else onClose();
           }}
           onClose={() => setConfirmDelete(false)}
         />
@@ -1156,9 +1200,8 @@ function ApproverRequestDetailsModal({
           onConfirm={async () => {
             await travelRequestsApi.delete(journey.id);
             toast.success(`Request #${journey.id} deleted.`);
-            onClose();
             if (onDeleted) onDeleted();
-            else window.location.reload();
+            else onClose();
           }}
           onClose={() => setConfirmDelete(false)}
         />
@@ -1567,7 +1610,8 @@ function ApproverBookings() {
 }
 
 function Approvals({ history = false }: { history?: boolean }) {
-  const { journeys, loading, error } = useTravelRequests();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { journeys, loading, error } = useTravelRequests(refreshKey);
   const [working, setWorking] = useState<string | null>(null);
   const [selectedJourney, setSelectedJourney] = useState<Journey | null>(null);
   const [confirmation, setConfirmation] = useState<{ journey: Journey; action: "approve" | "reject" } | null>(null);
@@ -1581,7 +1625,7 @@ function Approvals({ history = false }: { history?: boolean }) {
       if (action === "approve") await travelRequestsApi.approve(journey.id, approver);
       else await travelRequestsApi.reject(journey.id, approver, "Rejected from Travora approval workspace.");
       toast.success(`Request ${action === "approve" ? "approved" : "rejected"}.`);
-      window.location.reload();
+      setRefreshKey((k) => k + 1);
     } catch (decisionError) {
       toast.error(decisionError instanceof Error ? decisionError.message : "Decision could not be saved.");
     } finally {
@@ -1713,7 +1757,10 @@ function Approvals({ history = false }: { history?: boolean }) {
           onClose={() => setSelectedJourney(null)}
           onApprove={(j) => setConfirmation({ journey: j, action: "approve" })}
           onReject={(j) => setConfirmation({ journey: j, action: "reject" })}
-          onDeleted={() => window.location.reload()}
+          onDeleted={() => {
+            setSelectedJourney(null);
+            setRefreshKey((k) => k + 1);
+          }}
         />
       )}
 
@@ -1731,9 +1778,9 @@ function Approvals({ history = false }: { history?: boolean }) {
           description="This will clear past approved and rejected requests from the queue history. Active pending items will remain untouched."
           confirmLabel="Clear history"
           onConfirm={async () => {
-            await travelRequestsApi.deletePastOrCompleted();
+            await travelRequestsApi.clearDecisionHistory();
             toast.success("Approval decision history cleared.");
-            window.location.reload();
+            setRefreshKey((k) => k + 1);
           }}
           onClose={() => setConfirmClearHistory(false)}
         />

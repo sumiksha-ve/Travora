@@ -4,7 +4,11 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (isLocal ? "http://loc
 
 export type Role = "EMPLOYEE" | "APPROVER" | "TRAVEL_DESK" | "ADMIN";
 export type AuthUser = { id: number; username: string; role: Role; employeeId?: string | null; token?: string };
-export type ApiRequestOptions = RequestInit & { skipAuth?: boolean };
+export type ApiRequestOptions = RequestInit & {
+  skipAuth?: boolean;
+  ignoreAuthFailure?: boolean;
+  timeoutMs?: number;
+};
 
 export const AUTH_EXPIRED_EVENT = "travora:auth-expired";
 const VALID_ROLES: Role[] = ["EMPLOYEE", "APPROVER", "TRAVEL_DESK", "ADMIN"];
@@ -104,11 +108,11 @@ export function clearAuth({ notify = false }: { notify?: boolean } = {}) {
 }
 
 export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { skipAuth, headers, ...requestOptions } = options;
+  const { skipAuth, ignoreAuthFailure, timeoutMs = 1500, headers, ...requestOptions } = options;
   const token = getToken();
   let response: Response;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 2500);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
@@ -130,7 +134,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
   let data: unknown = null;
   try { data = body ? JSON.parse(body) : null; } catch { data = body || null; }
   if (response.status === 401) {
-    if (skipAuth) throw new Error("Invalid username or password.");
+    if (skipAuth || ignoreAuthFailure) {
+      throw new Error("Unauthorized");
+    }
     clearAuth({ notify: true });
     throw new Error("Your session has expired. Please sign in again.");
   }
@@ -240,18 +246,82 @@ export function persistAuth(user: AuthUser) {
 
 const LOCAL_REQUESTS_KEY = "travora_local_requests";
 const LOCAL_BOOKINGS_KEY = "travora_local_bookings";
+const DELETED_REQUESTS_KEY = "travora_deleted_requests";
+const DELETED_BOOKINGS_KEY = "travora_deleted_bookings";
+const ALL_WIPED_KEY = "travora_all_wiped";
+
+export function getDeletedRequestIds(): Set<string> {
+  if (!isBrowser) return new Set();
+  try {
+    const raw = window.localStorage.getItem(DELETED_REQUESTS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(String));
+    }
+  } catch (e) {
+    console.warn("Failed to read deleted request ids", e);
+  }
+  return new Set();
+}
+
+export function markRequestIdsDeleted(ids: Array<string | number>) {
+  if (!isBrowser) return;
+  try {
+    const set = getDeletedRequestIds();
+    ids.forEach((id) => {
+      if (id !== undefined && id !== null) set.add(String(id));
+    });
+    window.localStorage.setItem(DELETED_REQUESTS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.warn("Failed to save deleted request ids", e);
+  }
+}
+
+export function getDeletedBookingIds(): Set<string> {
+  if (!isBrowser) return new Set();
+  try {
+    const raw = window.localStorage.getItem(DELETED_BOOKINGS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr.map(String));
+    }
+  } catch (e) {
+    console.warn("Failed to read deleted booking ids", e);
+  }
+  return new Set();
+}
+
+export function markBookingIdsDeleted(ids: Array<string | number>) {
+  if (!isBrowser) return;
+  try {
+    const set = getDeletedBookingIds();
+    ids.forEach((id) => {
+      if (id !== undefined && id !== null) set.add(String(id));
+    });
+    window.localStorage.setItem(DELETED_BOOKINGS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.warn("Failed to save deleted booking ids", e);
+  }
+}
 
 export function getLocalRequests(): any[] {
+  if (!isBrowser) return DEMO_REQUESTS;
+  if (window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+    return [];
+  }
+  const deletedIds = getDeletedRequestIds();
   try {
     const raw = window.localStorage.getItem(LOCAL_REQUESTS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((r) => !deletedIds.has(String(r.id)));
+      }
     }
   } catch (e) {
     console.warn("Failed to load local requests", e);
   }
-  return DEMO_REQUESTS;
+  return DEMO_REQUESTS.filter((r) => !deletedIds.has(String(r.id)));
 }
 
 export function saveLocalRequests(requests: any[]) {
@@ -263,16 +333,28 @@ export function saveLocalRequests(requests: any[]) {
 }
 
 export function getLocalBookings(): any[] {
+  if (!isBrowser) return DEMO_BOOKINGS;
+  if (window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+    return [];
+  }
+  const deletedReqIds = getDeletedRequestIds();
+  const deletedBookingIds = getDeletedBookingIds();
   try {
     const raw = window.localStorage.getItem(LOCAL_BOOKINGS_KEY);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id))
+        );
+      }
     }
   } catch (e) {
     console.warn("Failed to load local bookings", e);
   }
-  return DEMO_BOOKINGS;
+  return DEMO_BOOKINGS.filter(
+    (b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id))
+  );
 }
 
 export function saveLocalBookings(bookings: any[]) {
@@ -285,22 +367,35 @@ export function saveLocalBookings(bookings: any[]) {
 
 export const travelRequestsApi = {
   list: async () => {
+    if (isBrowser && window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+      return [];
+    }
+    const deleted = getDeletedRequestIds();
     try {
-      const data = await apiRequest<any[]>("/api/travel-requests");
-      if (Array.isArray(data)) return data;
+      const data = await apiRequest<any[]>("/api/travel-requests", { ignoreAuthFailure: true, timeoutMs: 1200 });
+      if (Array.isArray(data)) {
+        return data.filter((r) => !deleted.has(String(r.id)));
+      }
       return getLocalRequests();
     } catch {
       return getLocalRequests();
     }
   },
   get: async (id: string) => {
+    const deleted = getDeletedRequestIds();
+    if (deleted.has(String(id))) return null;
     try {
-      return await apiRequest(`/api/travel-requests/${id}`);
+      const req = await apiRequest(`/api/travel-requests/${id}`, { ignoreAuthFailure: true, timeoutMs: 1200 });
+      if (req && !deleted.has(String((req as any).id))) return req;
+      return getLocalRequests().find((r) => String(r.id) === String(id)) || null;
     } catch {
-      return getLocalRequests().find((r) => String(r.id) === String(id)) || DEMO_REQUESTS[0];
+      return getLocalRequests().find((r) => String(r.id) === String(id)) || null;
     }
   },
   create: async (payload: unknown) => {
+    if (isBrowser) {
+      window.localStorage.removeItem(ALL_WIPED_KEY);
+    }
     const user = getStoredUser();
     const newReq = {
       id: `TR-${Math.floor(Math.random() * 9000 + 1000)}`,
@@ -318,7 +413,7 @@ export const travelRequestsApi = {
     const current = getLocalRequests();
     saveLocalRequests([newReq, ...current]);
     try {
-      await apiRequest("/api/travel-requests", { method: "POST", body: JSON.stringify(payload) });
+      await apiRequest("/api/travel-requests", { method: "POST", body: JSON.stringify(payload), ignoreAuthFailure: true });
     } catch {
       // Backend offline fallback handled by localStorage
     }
@@ -336,6 +431,7 @@ export const travelRequestsApi = {
       await apiRequest(`/api/travel-requests/${id}/approve`, {
         method: "PATCH",
         body: JSON.stringify({ approverName, comment }),
+        ignoreAuthFailure: true,
       });
     } catch {
       // Backend offline fallback
@@ -354,47 +450,111 @@ export const travelRequestsApi = {
       await apiRequest(`/api/travel-requests/${id}/reject`, {
         method: "PATCH",
         body: JSON.stringify({ approverName, comment }),
+        ignoreAuthFailure: true,
       });
     } catch {
       // Backend offline fallback
     }
     return { id, status: "REJECTED", approverName, comment };
   },
-  delete: async (id: string) => {
+  delete: async (id: string | number) => {
+    const strId = String(id);
+    markRequestIdsDeleted([strId]);
+
+    // Remove from local requests
     const currentReqs = getLocalRequests();
-    saveLocalRequests(currentReqs.filter((r) => String(r.id) !== String(id)));
+    saveLocalRequests(currentReqs.filter((r) => String(r.id) !== strId));
+
+    // Remove linked bookings
     const currentBookings = getLocalBookings();
-    saveLocalBookings(currentBookings.filter((b) => String(b.travelRequest?.id) !== String(id)));
+    const linkedBookings = currentBookings.filter((b) => String(b.travelRequest?.id) === strId);
+    if (linkedBookings.length > 0) {
+      markBookingIdsDeleted(linkedBookings.map((b) => b.id));
+    }
+    saveLocalBookings(currentBookings.filter((b) => String(b.travelRequest?.id) !== strId));
+
     try {
-      await apiRequest(`/api/travel-requests/${id}`, { method: "DELETE" });
+      await apiRequest(`/api/travel-requests/${strId}`, { method: "DELETE", ignoreAuthFailure: true, timeoutMs: 1000 });
     } catch {
       // Backend offline fallback
     }
-    return { success: true, id };
+    return { success: true, id: strId };
   },
   deleteAll: async () => {
+    if (isBrowser) {
+      window.localStorage.setItem(ALL_WIPED_KEY, "true");
+    }
+    const currentReqs = getLocalRequests();
+    const currentBookings = getLocalBookings();
+    markRequestIdsDeleted(currentReqs.map((r) => r.id));
+    markBookingIdsDeleted(currentBookings.map((b) => b.id));
+    markRequestIdsDeleted(DEMO_REQUESTS.map((r) => r.id));
+    markBookingIdsDeleted(DEMO_BOOKINGS.map((b) => b.id));
+
     saveLocalRequests([]);
     saveLocalBookings([]);
+
     try {
-      await apiRequest("/api/travel-requests/all", { method: "DELETE" });
+      await apiRequest("/api/travel-requests/all", { method: "DELETE", ignoreAuthFailure: true, timeoutMs: 1000 });
     } catch {
       // Backend offline fallback
     }
     return { success: true };
   },
-  deletePastOrCompleted: async () => {
+  deletePastOrCompleted: async (options?: { includeApproved?: boolean; includeBooked?: boolean }) => {
     const currentReqs = getLocalRequests();
-    const activeReqs = currentReqs.filter((r) => {
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const toDelete: any[] = [];
+    const toKeep: any[] = [];
+
+    for (const r of currentReqs) {
       const status = String(r.status || "").toUpperCase();
-      return status === "PENDING" || status === "APPROVED";
-    });
-    const keptIds = new Set(activeReqs.map((r) => String(r.id)));
-    saveLocalRequests(activeReqs);
+      const returnDate = r.returnDate ? String(r.returnDate).split("T")[0] : null;
+      const travelDate = r.travelDate ? String(r.travelDate).split("T")[0] : null;
+      const isPastDate = (returnDate && returnDate < todayStr) || (!returnDate && travelDate && travelDate < todayStr);
+
+      if (options?.includeApproved) {
+        // Approver decision history clear: remove decisions that have already been reviewed
+        if (status !== "PENDING") {
+          toDelete.push(r);
+          continue;
+        }
+      }
+
+      // General mode (Employee/Admin past purge):
+      // Completed, Cancelled, Rejected, or dates in past
+      if (status === "COMPLETED" || status === "CANCELLED" || status === "REJECTED" || isPastDate) {
+        toDelete.push(r);
+      } else if (options?.includeBooked && status === "BOOKED") {
+        toDelete.push(r);
+      } else {
+        toKeep.push(r);
+      }
+    }
+
+    const deletedIds = toDelete.map((r) => r.id);
+    markRequestIdsDeleted(deletedIds);
+    saveLocalRequests(toKeep);
+
+    const keptIdSet = new Set(toKeep.map((r) => String(r.id)));
     const currentBookings = getLocalBookings();
-    saveLocalBookings(currentBookings.filter((b) => keptIds.has(String(b.travelRequest?.id))));
-    return { success: true, count: currentReqs.length - activeReqs.length };
+    const bookingsToKeep = currentBookings.filter((b) => keptIdSet.has(String(b.travelRequest?.id)));
+    const bookingsToDelete = currentBookings.filter((b) => !keptIdSet.has(String(b.travelRequest?.id)));
+    markBookingIdsDeleted(bookingsToDelete.map((b) => b.id));
+    saveLocalBookings(bookingsToKeep);
+
+    return { success: true, count: toDelete.length };
+  },
+  clearDecisionHistory: async () => {
+    return travelRequestsApi.deletePastOrCompleted({ includeApproved: true });
   },
   resetDemo: async () => {
+    if (isBrowser) {
+      window.localStorage.removeItem(ALL_WIPED_KEY);
+      window.localStorage.removeItem(DELETED_REQUESTS_KEY);
+      window.localStorage.removeItem(DELETED_BOOKINGS_KEY);
+    }
     saveLocalRequests(DEMO_REQUESTS);
     saveLocalBookings(DEMO_BOOKINGS);
     return { success: true };
@@ -403,24 +563,43 @@ export const travelRequestsApi = {
 
 export const bookingsApi = {
   list: async () => {
+    if (isBrowser && window.localStorage.getItem(ALL_WIPED_KEY) === "true") {
+      return [];
+    }
+    const deletedReqIds = getDeletedRequestIds();
+    const deletedBookingIds = getDeletedBookingIds();
     try {
-      const data = await apiRequest<any[]>("/api/bookings");
-      if (Array.isArray(data)) return data;
+      const data = await apiRequest<any[]>("/api/bookings", { ignoreAuthFailure: true, timeoutMs: 1200 });
+      if (Array.isArray(data)) {
+        return data.filter(
+          (b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id))
+        );
+      }
       return getLocalBookings();
     } catch {
       return getLocalBookings();
     }
   },
   byTravelRequest: async (id: string) => {
+    const deletedReqIds = getDeletedRequestIds();
+    const deletedBookingIds = getDeletedBookingIds();
+    if (deletedReqIds.has(String(id))) return null;
     try {
-      const data = await apiRequest(`/api/bookings/travel-request/${id}`);
-      if (data && (!Array.isArray(data) || data.length > 0)) return data;
+      const data = await apiRequest(`/api/bookings/travel-request/${id}`, { ignoreAuthFailure: true, timeoutMs: 1200 });
+      if (data && (!Array.isArray(data) || data.length > 0)) {
+        const arr = Array.isArray(data) ? data : [data];
+        const valid = arr.filter((b) => !deletedBookingIds.has(String(b.id)) && !deletedReqIds.has(String(b.travelRequest?.id)));
+        return Array.isArray(data) ? valid : valid[0] || null;
+      }
       return getLocalBookings().filter((b) => String(b.travelRequest?.id) === String(id));
     } catch {
       return getLocalBookings().filter((b) => String(b.travelRequest?.id) === String(id));
     }
   },
   create: async (payload: any) => {
+    if (isBrowser) {
+      window.localStorage.removeItem(ALL_WIPED_KEY);
+    }
     const reqId = payload.travelRequest?.id;
     const req = getLocalRequests().find((r) => String(r.id) === String(reqId)) || { id: reqId };
     const newBooking = {
@@ -440,7 +619,7 @@ export const bookingsApi = {
     );
     saveLocalRequests(updatedReqs);
     try {
-      await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload) });
+      await apiRequest("/api/bookings", { method: "POST", body: JSON.stringify(payload), ignoreAuthFailure: true });
     } catch {
       // Backend offline fallback
     }
@@ -451,7 +630,7 @@ export const bookingsApi = {
     const updated = current.map((b) => (String(b.id) === String(id) ? { ...b, ...payload } : b));
     saveLocalBookings(updated);
     try {
-      await apiRequest(`/api/bookings/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+      await apiRequest(`/api/bookings/${id}`, { method: "PUT", body: JSON.stringify(payload), ignoreAuthFailure: true });
     } catch {
       // Backend offline fallback
     }
@@ -464,23 +643,27 @@ export const bookingsApi = {
     );
     saveLocalBookings(updated);
     try {
-      await apiRequest(`/api/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}&cancellationCharge=${cancellationCharge}`, { method: "PUT" });
+      await apiRequest(`/api/bookings/${id}/cancel?reason=${encodeURIComponent(reason)}&cancellationCharge=${cancellationCharge}`, { method: "PUT", ignoreAuthFailure: true });
     } catch {
       // Backend offline fallback
     }
     return { id, cancelled: true, cancellationReason: reason, cancellationCharge };
   },
   delete: async (id: string) => {
+    const strId = String(id);
+    markBookingIdsDeleted([strId]);
     const current = getLocalBookings();
-    saveLocalBookings(current.filter((b) => String(b.id) !== String(id)));
+    saveLocalBookings(current.filter((b) => String(b.id) !== strId));
     try {
-      await apiRequest(`/api/bookings/${id}`, { method: "DELETE" });
+      await apiRequest(`/api/bookings/${strId}`, { method: "DELETE", ignoreAuthFailure: true, timeoutMs: 1000 });
     } catch {
       // Backend offline fallback
     }
-    return { success: true, id };
+    return { success: true, id: strId };
   },
   deleteAll: async () => {
+    const currentBookings = getLocalBookings();
+    markBookingIdsDeleted(currentBookings.map((b) => b.id));
     saveLocalBookings([]);
     return { success: true };
   },

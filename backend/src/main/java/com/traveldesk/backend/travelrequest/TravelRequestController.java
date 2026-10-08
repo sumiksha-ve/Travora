@@ -64,4 +64,18 @@ public class TravelRequestController {
                 decision
         );
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTravelRequest(
+            @PathVariable Long id
+    ) {
+        travelRequestService.deleteTravelRequest(id);
+    }
+
+    @DeleteMapping("/all")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAllTravelRequests() {
+        travelRequestService.deleteAllTravelRequests();
+    }
 }
